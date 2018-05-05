@@ -4,9 +4,9 @@ import struct
 from PyQt5.QtGui import QQuaternion, QVector3D
 
 class VmdBoneFrame():
-    def __init__(self):
+    def __init__(self, frame=0):
         self.name = ''
-        self.frame = 0
+        self.frame = frame
         self.position = QVector3D(0, 0, 0)
         self.rotation = QQuaternion()
 
