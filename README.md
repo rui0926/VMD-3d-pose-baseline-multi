@@ -23,7 +23,7 @@ python3系 で以下をインストールして下さい
 
 ## 実行方法
 
-1. [VMD-3d-pose-baseline-multi](https://github.com/miu200521358/VMD-3d-pose-baseline-multi) で生成された3D関節データを生成する
+1. [VMD-3d-pose-baseline-multi](https://github.com/miu200521358/VMD-3d-pose-baseline-multi) で生成された3D関節データを用意する
 1. [3DToVmd.bat](3DToVmd.bat) を実行する
 1. `3Dデータの出力結果ディレクトリパス` が聞かれるので、1.の結果ディレクトリパスを指定する
 1. 処理開始
