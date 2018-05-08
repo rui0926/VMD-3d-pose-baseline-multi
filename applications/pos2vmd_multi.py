@@ -18,7 +18,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def positions_to_frames(pos, angle=0, head_rotation=None, frame=0):
+def positions_to_frames(pos, frame=0, angle=0, head_rotation=None, expression_frames=None):
     logger.info("output frame={0}".format(str(frame)))
 
     """convert positions to bone frames"""
@@ -239,12 +239,23 @@ def position_list_to_vmd(positions, vmd_file, head_rotation=None, expression_fra
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     writer.write_vmd_file(vmd_file, bone_frames, showik_frames)
 
-def position_list_to_vmd_multi(positions_multi, vmd_file, angle=0, head_rotation=None, expression_frames=None):
+def position_list_to_vmd_multi(positions_multi, vmd_file, angle=0, head_rotation_list=None, expression_frames_list=None):
     writer = VmdWriter()
     
     bone_frames = []
     for frame, positions in enumerate(positions_multi):
-        bf = positions_to_frames(positions, angle, head_rotation, frame)
+        
+        if head_rotation_list is None:
+            head_rotation = None
+        else:
+            head_rotation = head_rotation_list[frame]
+        
+        if expression_frames_list is None:
+            expression_frames = None
+        else:
+            expression_frames = expression_frames_list[frame]
+
+        bf = positions_to_frames(positions, frame, angle, head_rotation, expression_frames)
         bone_frames.extend(bf)
     
     showik_frames = make_showik_frames()
@@ -255,13 +266,22 @@ def pos2vmd(pose_3d, vmd_file, head_rotation=None, expression_frames=None):
     positions = convert_position(pose_3d)
     position_list_to_vmd(positions, vmd_file, head_rotation, expression_frames)
     
+def pos2vmd_multi(pose_3d_list, vmd_file, head_rotation_list=None, expression_frames_list=None):
+    positions_multi = []
+
+    for pose_3d in pose_3d_list:
+        positions = convert_position(pose_3d)
+        positions_multi.append(positions)
+
+    position_list_to_vmd_multi(positions_multi, vmd_file, 0, head_rotation_list, expression_frames_list)
+    
 def position_file_to_vmd(position_file, vmd_file):
     positions = read_positions(position_file)
     position_list_to_vmd(positions, vmd_file)
     
-def position_multi_file_to_vmd(position_file, vmd_file, angle=0, head_rotation=None, expression_frames=None):
+def position_multi_file_to_vmd(position_file, vmd_file, angle=0, head_rotation_list=None, expression_frames_list=None):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, angle, head_rotation, expression_frames)
+    position_list_to_vmd_multi(positions_multi, vmd_file, angle, head_rotation_list, expression_frames_list)
     
 if __name__ == '__main__':
     import sys
@@ -298,3 +318,5 @@ if __name__ == '__main__':
     #     head_rotation = 
 
     position_multi_file_to_vmd(position_file, vmd_file, args.angle)
+
+    logger.info("VMDファイル出力完了: {0}".format(vmd_file))
