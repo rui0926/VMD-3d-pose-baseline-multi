@@ -18,6 +18,24 @@ IF /I "%TARGET_DIR%" EQU "" (
     EXIT /B
 )
 
+rem ---  上半身グローバルX軸角度補正
+
+echo --------------
+set GROBAL_UPPER_X_ANGLE=37
+echo 3D化した際に上半身がグローバルX軸に若干傾くのを補正します
+echo 0～360度の数字のみを入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、%GROBAL_UPPER_X_ANGLE%度回転します。
+set /P GROBAL_UPPER_X_ANGLE="上半身グローバルX軸角度補正: "
+
+rem ---  下半身グローバルX軸角度補正
+
+echo --------------
+set GROBAL_LOWER_X_ANGLE=17
+echo 3D化した際に下半身がグローバルX軸に若干傾くのを補正します
+echo 0～360度の数字のみを入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、%GROBAL_LOWER_X_ANGLE%度回転します。
+set /P GROBAL_LOWER_X_ANGLE="上半身グローバルX軸角度補正: "
+
 
 rem ---  詳細ログ有無
 
@@ -32,11 +50,6 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 )
 
 
-
-rem ---  X軸角度補正
-rem --- set /P X_ANGLE="X軸角度補正(0～360): "
-rem --- echo X_ANGLE：%X_ANGLE%
-
 rem ---  python 実行
-python applications\pos2vmd_multi.py --v %VERBOSE% --t %TARGET_DIR% --a 0
+python applications\pos2vmd_multi.py --v %VERBOSE% --t %TARGET_DIR% --u %GROBAL_UPPER_X_ANGLE% --l %GROBAL_LOWER_X_ANGLE%
 
