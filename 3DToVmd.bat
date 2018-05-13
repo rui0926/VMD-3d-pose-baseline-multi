@@ -36,6 +36,26 @@ echo 0～360度の数字のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_LOWER_X_ANGLE%度回転します。
 set /P GROBAL_LOWER_X_ANGLE="上半身グローバルX軸角度補正: "
 
+rem ---  同軸フレーム間引き角度
+
+echo --------------
+set SAME_DECIMATION_ANGLE=30
+echo フレームの間引きに使用する角度を指定します
+echo 同じ軸(X軸方向への回転が続く場合等)に指定された角度以内の回転があった場合に間引きされます。
+echo 0～360度の数字のみを入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、%SAME_DECIMATION_ANGLE%度間引きます。
+set /P SAME_DECIMATION_ANGLE="同軸フレーム間引き角度: "
+
+rem ---  異軸フレーム間引き角度
+
+echo --------------
+set DIFF_DECIMATION_ANGLE=6
+echo フレームの間引きに使用する角度を指定します
+echo 違うじ軸(X軸方向への回転からZ軸方向に回転した場合等)に指定された角度以内の回転があった場合に間引きされます。
+echo 0～360度の数字のみを入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、%DIFF_DECIMATION_ANGLE%度間引きます。
+set /P DIFF_DECIMATION_ANGLE="異軸フレーム間引き角度: "
+
 
 rem ---  詳細ログ有無
 
@@ -51,5 +71,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py --v %VERBOSE% --t %TARGET_DIR% --u %GROBAL_UPPER_X_ANGLE% --l %GROBAL_LOWER_X_ANGLE%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -u %GROBAL_UPPER_X_ANGLE% -l %GROBAL_LOWER_X_ANGLE% -s %SAME_DECIMATION_ANGLE% -d %DIFF_DECIMATION_ANGLE%
 
