@@ -29,6 +29,7 @@ rem ---  直立姿勢フレーム番号
 echo --------------
 set UPRIGHT_FRAME_IDX=1
 echo できるだけ人物が直立(首から足まで)しているフレームのINDEX(1始まり)を入力して下さい。
+echo 指定されたフレームの人物の位置がMMDのセンターとなります。
 echo 何も入力せず、ENTERを押下した場合、%UPRIGHT_FRAME_IDX%フレーム目を直立として処理します。
 set /P UPRIGHT_FRAME_IDX="直立姿勢フレームINDEX: "
 
@@ -39,8 +40,6 @@ echo センター移動をどの程度の距離で行うか整数で入力して下さい。
 echo 値が小さいほど、センター移動の幅が小さくなります。
 echo 何も入力せず、ENTERを押下した場合、%CENTER_SCALE%スケールで処理します。
 set /P CENTER_SCALE="センター移動倍率: "
-
-
 
 rem ---  グローバルX軸角度補正
 
