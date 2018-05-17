@@ -85,6 +85,7 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 )
 
 
+
 rem ---  python é¿çs
 python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_SCALE% -x %GROBAL_X_ANGLE% -s %SAME_DECIMATION_ANGLE% -d %DIFF_DECIMATION_ANGLE%
 
