@@ -28,18 +28,28 @@ set /P MODEL_BONE_CSV="ボーン構造CSVファイル: "
 rem ---  直立姿勢フレーム番号
 echo --------------
 set UPRIGHT_FRAME_IDX=1
-echo できるだけ人物が直立(首から足まで)しているフレームのINDEX(1始まり)を入力して下さい。
+echo できるだけ人物が正面向きで直立しているフレームのINDEX(1始まり)を入力して下さい。
+echo 特に首と両足付け根の三角が正面判定の基準となります。
 echo 指定されたフレームの人物の位置がMMDのセンターとなります。
 echo 何も入力せず、ENTERを押下した場合、%UPRIGHT_FRAME_IDX%フレーム目を直立として処理します。
 set /P UPRIGHT_FRAME_IDX="直立姿勢フレームINDEX: "
 
-rem ---  センター移動倍率
+rem ---  センターXY移動倍率
 echo --------------
-set CENTER_SCALE=30
-echo センター移動をどの程度の距離で行うか整数で入力して下さい。
-echo 値が小さいほど、センター移動の幅が小さくなります。
-echo 何も入力せず、ENTERを押下した場合、%CENTER_SCALE%スケールで処理します。
-set /P CENTER_SCALE="センター移動倍率: "
+set CENTER_XY_SCALE=30
+echo センターXY移動に掛ける倍率を整数で入力して下さい。
+echo 値が小さいほど、センターXY移動の幅が小さくなります。
+echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
+set /P CENTER_XY_SCALE="センターXY移動倍率: "
+
+rem ---  センターZ移動倍率
+echo --------------
+set CENTER_Z_SCALE=10
+echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
+echo 値が小さいほど、センターZ移動の幅が小さくなります。
+echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
+echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_Z_SCALE%」で処理します。
+set /P CENTER_Z_SCALE="センターZ移動倍率: "
 
 rem ---  グローバルX軸角度補正
 
@@ -87,5 +97,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_SCALE% -x %GROBAL_X_ANGLE% -s %SAME_DECIMATION_ANGLE% -d %DIFF_DECIMATION_ANGLE%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -s %SAME_DECIMATION_ANGLE% -d %DIFF_DECIMATION_ANGLE%
 

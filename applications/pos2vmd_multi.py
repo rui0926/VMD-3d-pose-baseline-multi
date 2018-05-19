@@ -42,7 +42,7 @@ bone_frame_dic = {
 }
 
 def positions_to_frames(pos, frame=0, xangle=0):
-    logger.info("角度計算 frame={0}".format(str(frame)))
+    logger.debug("角度計算 frame={0}".format(str(frame)))
 
 	# 補正角度のクォータニオン
     correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle, 0, 0))
@@ -51,7 +51,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     # 上半身
     bf = VmdBoneFrame(frame)
     bf.name = b'\x8f\xe3\x94\xbc\x90\x67' # '上半身'
-    direction = pos[8] - pos[0]
+    direction = pos[8] - pos[7]
     up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
     upper_body_orientation = QQuaternion.fromDirection(direction, up)
     initial = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
@@ -95,20 +95,21 @@ def positions_to_frames(pos, frame=0, xangle=0):
     bf.rotation = neck_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["頭"].append(bf)
     
+    # FIXME 一旦コメントアウト
     # 左肩
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
-    direction = pos[11] - pos[8]
-    up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[12] - pos[11]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    # TODO パラメータ要調整
-    initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.5, 0), QVector3D(0, 0.5, -1.5))
-    rotation = correctqq * orientation * initial_orientation.inverted()
-    # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * bf.rotation = rotation なので、
-    left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
-    bf.rotation = left_shoulder_rotation
-    bone_frame_dic["左肩"].append(bf)
+    # bf = VmdBoneFrame(frame)
+    # bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
+    # direction = pos[11] - pos[8]
+    # up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[12] - pos[11]))
+    # orientation = QQuaternion.fromDirection(direction, up)
+    # # TODO パラメータ要調整
+    # initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.5, 0), QVector3D(0, 0.5, -1.5))
+    # rotation = correctqq * orientation * initial_orientation.inverted()
+    # # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    # # upper_body_rotation * bf.rotation = rotation なので、
+    # left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
+    # bf.rotation = left_shoulder_rotation
+    # bone_frame_dic["左肩"].append(bf)
     
     # 左腕
     bf = VmdBoneFrame(frame)
@@ -120,7 +121,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     rotation = correctqq * orientation * initial_orientation.inverted()
     # 左腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # left_shoulder_rotation * upper_body_rotation * bf.rotation = rotation なので、
-    bf.rotation = left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    bf.rotation = upper_body_rotation.inverted() * rotation
     left_arm_rotation = bf.rotation # 後で使うので保存しておく
     bone_frame_dic["左腕"].append(bf)
     
@@ -135,24 +136,25 @@ def positions_to_frames(pos, frame=0, xangle=0):
     # ひじはX軸補正しない(Y軸にしか曲がらないから)
     # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_arm_rotation * bf.rotation = rotation なので、
-    bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    bf.rotation = left_arm_rotation.inverted() * upper_body_rotation.inverted() * rotation
     # bf.rotation = (upper_body_rotation * left_arm_rotation).inverted() * rotation # 別の表現
     bone_frame_dic["左ひじ"].append(bf)
     
+    # FIXME 一旦コメントアウト
     # 右肩
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x8C\xA8' # '右肩'
-    direction = pos[14] - pos[8]
-    up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[15] - pos[14]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    # TODO パラメータ要調整
-    initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.5, 0), QVector3D(0, 0.5, 1.5))
-    rotation = correctqq * orientation * initial_orientation.inverted()
-    # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * bf.rotation = rotation なので、
-    right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
-    bf.rotation = right_shoulder_rotation
-    bone_frame_dic["右肩"].append(bf)
+    # bf = VmdBoneFrame(frame)
+    # bf.name = b'\x89\x45\x8C\xA8' # '右肩'
+    # direction = pos[14] - pos[8]
+    # up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[15] - pos[14]))
+    # orientation = QQuaternion.fromDirection(direction, up)
+    # # TODO パラメータ要調整
+    # initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.5, 0), QVector3D(0, 0.5, 1.5))
+    # rotation = correctqq * orientation * initial_orientation.inverted()
+    # # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    # # upper_body_rotation * bf.rotation = rotation なので、
+    # right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
+    # bf.rotation = right_shoulder_rotation
+    # bone_frame_dic["右肩"].append(bf)
     
     # 右腕
     bf = VmdBoneFrame(frame)
@@ -162,7 +164,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
     rotation = correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    bf.rotation = upper_body_rotation.inverted() * rotation
     right_arm_rotation = bf.rotation
     bone_frame_dic["右腕"].append(bf)
     
@@ -175,7 +177,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
     # ひじはX軸補正しない(Y軸にしか曲がらないから)
     rotation = orientation * initial_orientation.inverted()
-    bf.rotation = right_arm_rotation.inverted() * right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    bf.rotation = right_arm_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["右ひじ"].append(bf)
 
     # 左足
@@ -299,17 +301,18 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_scale=0, xangle=0, sdecimation=0, ddecimation=0):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_xy_scale=0, center_z_scale=0, xangle=0, sdecimation=0, ddecimation=0):
     writer = VmdWriter()
 
-    # 直立フレームの位置情報
-    upright_position = []
-    
+    logger.info("角度計算開始")
+
     for frame, positions in enumerate(positions_multi):
         positions_to_frames(positions, frame, xangle)    
 
+    logger.info("センター計算開始")
+
     # センターの計算
-    calc_center(smoothed_file, bone_csv_file, upright_idx, center_scale)
+    calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale)
 
 
     # フレームの間引き
@@ -327,7 +330,7 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     writer.write_vmd_file(vmd_file, bone_frames, showik_frames)
 
 # センターの計算
-def calc_center(smoothed_file, bone_csv_file, upright_idx, center_scale):
+def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale):
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
     # グルーブボーンがあるか
@@ -350,6 +353,14 @@ def calc_center(smoothed_file, bone_csv_file, upright_idx, center_scale):
                 # 左足ボーン
                 left_leg_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
+            if row[1] == "上半身":
+                # 上半身ボーン
+                upper_body_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "下半身":
+                # 下半身ボーン
+                under_body_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
             if row[1] == "センター":
                 # センターボーン
                 center_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
@@ -364,85 +375,400 @@ def calc_center(smoothed_file, bone_csv_file, upright_idx, center_scale):
         
         while line:
             # 空白で複数項目に分解
-            smoothed = re.split("\s*", line)
+            smoothed = re.split("\s+", line)
 
-            logger.debug(smoothed)
+            # logger.debug(smoothed)
 
             # 首の位置
-            smoothed_2d[n][0] = QVector2D(float(smoothed[2]), float(smoothed[3]))
+            smoothed_2d[n][0] = QVector3D(float(smoothed[2]), float(smoothed[3]), 0)
             # 右足付け根
-            smoothed_2d[n][1] = QVector2D(float(smoothed[16]), float(smoothed[17]))
+            smoothed_2d[n][1] = QVector3D(float(smoothed[16]), float(smoothed[17]), 0)
             # 左足付け根
-            smoothed_2d[n][2] = QVector2D(float(smoothed[22]), float(smoothed[23]))
+            smoothed_2d[n][2] = QVector3D(float(smoothed[22]), float(smoothed[23]), 0)
 
             n += 1
 
             line = sf.readline()
 
-    logger.debug("neck_3d")
-    logger.debug(neck_3d)
-    logger.debug("right_leg_3d")
-    logger.debug(right_leg_3d)
-    logger.debug("left_leg_3d")
-    logger.debug(left_leg_3d)
-    logger.debug("center_3d")
-    logger.debug(center_3d)
+    # logger.debug("neck_3d")
+    # logger.debug(neck_3d)
+    # logger.debug("right_leg_3d")
+    # logger.debug(right_leg_3d)
+    # logger.debug("left_leg_3d")
+    # logger.debug(left_leg_3d)
+    # logger.debug("center_3d")
+    # logger.debug(center_3d)
 
     # ボーン頂点からの三角形面積
-    bone_area = calc_triangle_area(neck_3d, right_leg_3d, left_leg_3d)
+    bone_upright_area = calc_triangle_area(neck_3d, right_leg_3d, left_leg_3d)
 
-    logger.debug("smoothed_2d[upright_idx]")
-    logger.debug(smoothed_2d[upright_idx])
+    # logger.debug("smoothed_2d[upright_idx]")
+    # logger.debug(smoothed_2d[upright_idx])
 
     # 直立フレームの三角形面積
-    upright_area = calc_triangle_area(smoothed_2d[upright_idx][0], smoothed_2d[upright_idx][1], smoothed_2d[upright_idx][2])
+    smoothed_upright_area = calc_triangle_area(smoothed_2d[upright_idx][0], smoothed_2d[upright_idx][1], smoothed_2d[upright_idx][2])
 
-    logger.debug("upright_area")
-    logger.debug(upright_area)
-    
+    # logger.debug("upright_area")
+    # logger.debug(smoothed_upright_area)
+
+    # ボーンと映像の三角形比率(スケール調整あり)
+    upright_xy_scale = bone_upright_area / smoothed_upright_area * center_xy_scale
+
+    # logger.debug("upright_scale")
+    # logger.debug(upright_xy_scale)
+
     # 直立フレームの左足と右足の位置の平均
     upright_leg_avg = abs((smoothed_2d[upright_idx][1].y() + smoothed_2d[upright_idx][2].y()) / 2)
 
-    logger.debug("upright_leg_avg")
-    logger.debug(upright_leg_avg)
-    
-    # ボーンと映像の三角形比率(スケール調整あり)
-    upright_scale = bone_area / upright_area * center_scale
+    # logger.debug("upright_leg_avg")
+    # logger.debug(upright_leg_avg)
 
-    logger.debug("upright_scale")
-    logger.debug(upright_scale)
+    # # 上半身から首までの距離
+    # neck_upright_distance = upper_body_3d.distanceToPoint(neck_3d)
+
+    # # logger.debug("neck_upright_distance")
+    # # logger.debug(neck_upright_distance)
+
+    # # 上半身から左足までの距離
+    # left_leg_upright_distance = upper_body_3d.distanceToPoint(left_leg_3d)
+
+    # # logger.debug("left_leg_upright_distance")
+    # # logger.debug(left_leg_upright_distance)
+
+    # # 上半身から左足までの距離
+    # right_leg_upright_distance = upper_body_3d.distanceToPoint(right_leg_3d)
+    
+    # logger.debug("right_leg_upright_distance")
+    # logger.debug(right_leg_upright_distance)
+
+    # 3Dでの首・左足・右足の投影三角形
+    pos_upright_area = calc_triangle_area(positions_multi[upright_idx][8], positions_multi[upright_idx][1], positions_multi[upright_idx][4])
 
     for n, smoothed in enumerate(smoothed_2d):
-        logger.info("センター計算 frame={0}".format(n))
+        logger.debug("センター計算 frame={0}".format(n))
 
         # 左足と右足の位置の平均
         leg_avg = abs((smoothed_2d[n][1].y() + smoothed_2d[n][2].y()) / 2)
-
-        logger.debug("leg_avg")
-        logger.debug(leg_avg)
         
         # 足の上下差
         leg_diff = upright_leg_avg - leg_avg
 
-        logger.debug("leg_diff")
-        logger.debug(leg_diff)
-
+        # Y軸移動
         if is_groove:
             # グルーブがある場合には、そっちに割り当てる
-            bone_frame_dic["グルーブ"][n].position.setY(leg_diff * upright_scale)
+            bone_frame_dic["グルーブ"][n].position.setY(leg_diff * upright_xy_scale)
         else:
-            bone_frame_dic["センター"][n].position.setY(leg_diff * upright_scale)
+            bone_frame_dic["センター"][n].position.setY(leg_diff * upright_xy_scale)
         
         # 首・左足・右足の中心部分をX軸移動
         x_avg = ((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3) \
                     - smoothed_2d[upright_idx][0].x()
-        bone_frame_dic["センター"][n].position.setX(x_avg * upright_scale)
+        bone_frame_dic["センター"][n].position.setX(x_avg * upright_xy_scale)
+
+        # 現在の映像の三角形面積
+        # now_smoothed_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
+
+        # logger.debug("smoothed_2d[n][0]")
+        # logger.debug(smoothed_2d[n][0])
+
+        # logger.debug("smoothed_2d[n][1]")
+        # logger.debug(smoothed_2d[n][1])
+
+        # logger.debug("smoothed_2d[n][2]")
+        # logger.debug(smoothed_2d[n][2])
+
+        # logger.debug("now_smoothed_area")
+        # logger.debug(now_smoothed_area)
+
+        # # 首の位置を上半身の傾きから求める
+        # upper_slope = QQuaternion(0, 0, -1, 0).inverted() * bone_frame_dic["上半身"][n].rotation.normalized() * neck_upright_distance
+
+        # # 左足の位置を下半身の傾きから求める
+        # left_leg_slope = QQuaternion(0, 0.2, 1, 0).inverted() * bone_frame_dic["下半身"][n].rotation.normalized() * left_leg_upright_distance
+
+        # # 右足の位置を下半身の傾きから求める
+        # right_leg_slope = QQuaternion(0, -0.2, 1, 0).inverted() * bone_frame_dic["下半身"][n].rotation.normalized() * right_leg_upright_distance
+
+        # # 現在のボーン構造の三角形面積
+        # now_bone_area = calc_triangle_area(upper_slope.vector(), left_leg_slope.vector(), right_leg_slope.vector())
+        
+        # logger.debug("smoothed_upright_area")
+        # logger.debug(smoothed_upright_area)
+
+        # 3Dでの首・左足・右足の投影三角形
+        pos_now_area = calc_triangle_area(positions_multi[n][8], positions_multi[n][1], positions_multi[n][4])
+
+        # logger.debug("positions_multi[n][8]")
+        # logger.debug(positions_multi[n][8])
+        # logger.debug("positions_multi[n][1]")
+        # logger.debug(positions_multi[n][1])
+        # logger.debug("positions_multi[n][4]")
+        # logger.debug(positions_multi[n][4])
+
+        # logger.debug("pos_upright_area")
+        # logger.debug(pos_upright_area)
+
+        # logger.debug("pos_now_area")
+        # logger.debug(pos_now_area)
+
+        # 3Dでの現在の縮尺
+        pos_scale = pos_now_area / pos_upright_area
+
+        # logger.debug("pos_scale")
+        # logger.debug(pos_scale)
+
+        # logger.debug("pos_scale ** 2")
+        # logger.debug(pos_scale ** 2)
+
+        # 2Dでの首・左足・右足の投影三角形
+        smoothed_now_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
+
+        # logger.debug("smoothed_2d[n][0]")    
+        # logger.debug(smoothed_2d[n][0])
+        # logger.debug("smoothed_2d[n][1]")    
+        # logger.debug(smoothed_2d[n][1])
+        # logger.debug("smoothed_2d[n][2]")    
+        # logger.debug(smoothed_2d[n][2])
+
+        # logger.debug("smoothed_upright_area")
+        # logger.debug(smoothed_upright_area)
+
+        # logger.debug("smoothed_now_area")
+        # logger.debug(smoothed_now_area)
+
+        # 2Dでの現在の縮尺
+        smoothed_scale = smoothed_now_area / smoothed_upright_area
+
+        # logger.debug("smoothed_scale")
+        # logger.debug(smoothed_scale)
+
+        # logger.debug("((1 - smoothed_scale) ** 2)")
+        # logger.debug(((1 - smoothed_scale) ** 2))
+
+        now_z_scale = pos_scale * (1 - smoothed_scale)
+
+        # logger.debug("now_z_scale")
+        # logger.debug(now_z_scale)
+
+        # logger.debug("now_z_scale * center_z_scale")
+        # logger.debug(now_z_scale * center_z_scale)
+
+        # Z軸の移動補正
+        bone_frame_dic["センター"][n].position.setZ(now_z_scale * center_z_scale)
+
+
+        # # 上半身の各軸傾き具合
+        # rx = bone_frame_dic["上半身"][n].rotation.toEulerAngles().x()
+        # ry = bone_frame_dic["上半身"][n].rotation.toEulerAngles().y() * -1
+        # rz = bone_frame_dic["上半身"][n].rotation.toEulerAngles().z() * -1
+
+        # # 傾いたところの頂点：首（傾きを反転させて正面向いた形にする）
+        # smoothed_upright_slope_neck = calc_slope_point(smoothed_2d[upright_idx][8], rx * -1, ry * -1, rz * -1)
+        # # 傾いたところの頂点：左足
+        # smoothed_upright_slope_left_leg = calc_slope_point(smoothed_2d[upright_idx][1], rx * -1, ry * -1, rz * -1)
+        # # 傾いたところの頂点：右足
+        # smoothed_upright_slope_right_leg = calc_slope_point(smoothed_2d[upright_idx][2], rx * -1, ry * -1, rz * -1)
+
+        # # 傾きを反転させた直立面積
+        # smoothed_upright_slope_area = calc_triangle_area(smoothed_upright_slope_neck, smoothed_upright_slope_left_leg, smoothed_upright_slope_right_leg)
+
+        # logger.debug("smoothed_upright_slope_area")
+        # logger.debug(smoothed_upright_slope_area)
+
+        # logger.debug("smoothed_upright_area")
+        # logger.debug(smoothed_upright_area)
+
+        # # 直立の関節の回転分面積を現在の関節面積で割って、大きさの比率を出す
+        # now_z_scale = smoothed_upright_slope_area / smoothed_upright_area
+
+        # if n == 340 or n == 341:
+
+        #     logger.debug("smoothed_2d[upright_idx][0]")
+        #     logger.debug(smoothed_2d[upright_idx][0])
+
+        #     logger.debug("smoothed_2d[upright_idx][1]")
+        #     logger.debug(smoothed_2d[upright_idx][1])
+
+        #     logger.debug("smoothed_2d[upright_idx][2]")
+        #     logger.debug(smoothed_2d[upright_idx][2])
+
+        #     logger.debug("smoothed_upright_slope_neck")
+        #     logger.debug(smoothed_upright_slope_neck)
+
+        #     logger.debug("smoothed_upright_slope_left_leg")
+        #     logger.debug(smoothed_upright_slope_left_leg)
+
+        #     logger.debug("smoothed_upright_slope_right_leg")
+        #     logger.debug(smoothed_upright_slope_right_leg)
+
+        #     logger.debug("smoothed_upright_slope_area")
+        #     logger.debug(smoothed_upright_slope_area)
+
+        # # 傾きの総数 - 各傾きの絶対値＝傾き具合
+        # rsum = (90 - abs(rx)) + (90 - abs(90 - abs(ry))) + (90 - abs(rz))
+        # # 360で割って、どれくらい傾いているか係数算出(1に近いほど正面向き)
+        # rsum_scale = (180 / rsum) ** ( center_z_scale ** center_z_scale)
+
+        # logger.debug("rx")
+        # logger.debug(rx)
+
+        # logger.debug("ry")
+        # logger.debug(ry)
+
+        # logger.debug("rz")
+        # logger.debug(rz)
+
+        # logger.debug("rsum")
+        # logger.debug(rsum)
+
+        # logger.debug("rsum_scale")
+        # logger.debug(rsum_scale)
+
+        # logger.debug("now_z_scale")
+        # logger.debug(now_z_scale)
+            
+        # # 1より大きい場合、近くにある(マイナス)
+        # # 1より小さい場合、遠くにある(プラス)
+        # now_z_scale_pm = 1 - now_z_scale
+
+        # logger.debug("now_z_scale_pm")
+        # logger.debug(now_z_scale_pm)
+
+        # logger.debug("now_z_scale_pm * rsum_scale")
+        # logger.debug(now_z_scale_pm * rsum_scale)
+
+        # if n < 20:
+        # logger.debug("upper_slope")
+        # logger.debug(upper_slope)
+        # logger.debug(upper_slope.vector())
+
+        # logger.debug("left_leg_slope")
+        # logger.debug(left_leg_slope)
+        # logger.debug(left_leg_slope.vector())
+
+        # logger.debug("right_leg_slope")
+        # logger.debug(right_leg_slope)
+        # logger.debug(right_leg_slope.vector())
+
+        # logger.debug("bone_upright_area")
+        # logger.debug(bone_upright_area)
+
+        # logger.debug("now_bone_area")
+        # logger.debug(now_bone_area)
+
+        # logger.debug("now_scale")
+        # logger.debug(now_scale)
+
+        # logger.debug("now_scale * center_scale")
+        # logger.debug(now_scale * center_scale)
+
+        # logger.debug("leg_avg")
+        # logger.debug(leg_avg)
+        
+        # logger.debug("leg_diff")
+        # logger.debug(leg_diff)
+        
+        # logger.debug("smoothed_2d[upright_idx][0].x()")
+        # logger.debug(smoothed_2d[upright_idx][0].x())
+        
+        # logger.debug("smoothed_2d[n][0].x()")
+        # logger.debug(smoothed_2d[n][0].x())
+        
+        # logger.debug("smoothed_2d[n][1].x()")
+        # logger.debug(smoothed_2d[n][1].x())
+        
+        # logger.debug("smoothed_2d[n][2].x()")
+        # logger.debug(smoothed_2d[n][2].x())
+        
+        # logger.debug("((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3)")
+        # logger.debug(((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3))
+        
+        # logger.debug("x_avg")
+        # logger.debug(x_avg)
+
+        # logger.debug("now_smoothed_area")
+        # logger.debug(now_smoothed_area)
+
+        # logger.debug("now_position_area")
+        # logger.debug(now_position_area)
+
+        # logger.debug("now_scale")
+        # logger.debug(now_scale)
+
+        # logger.debug("now_scale * upright_position_scale")
+        # logger.debug(now_scale * upright_position_scale)
 
         
 
+        # # モデルの上半身の傾き
+        # upper_body_euler = QVector3D(
+        #     bone_frame_dic["上半身"][n].rotation.toEulerAngles().x() \
+        #     , bone_frame_dic["上半身"][n].rotation.toEulerAngles().y() * -1 \
+        #     , bone_frame_dic["上半身"][n].rotation.toEulerAngles().z() * -1 \
+        # ) 
+
+
+
+        # # モデルの上半身の傾き。初期位置からフレームの位置まで回転
+        # upper_body_qq = QQuaternion(0, upper_body_3d)
+        # # upper_body_qq = QQuaternion.rotationTo( upper_body_3d, bone_frame_dic["上半身"][n].rotation.vector() )
+
+        # if n < 20:
+        #     logger.debug("bone_frame_dic")
+        #     logger.debug(bone_frame_dic["上半身"][n].rotation)
+        #     logger.debug(bone_frame_dic["上半身"][n].rotation.toVector4D())
+        #     logger.debug(bone_frame_dic["上半身"][n].rotation.toEulerAngles())
+        #     v = bone_frame_dic["上半身"][n].rotation.toVector4D()
+        #     logger.debug(v.x() * v.w())
+        #     logger.debug(v.y() * v.w() * -1)
+        #     logger.debug(v.z() * v.w() * -1)
+        #     logger.debug("upper_body_qq")
+        #     logger.debug(upper_body_qq)
+        #     logger.debug(upper_body_qq.toEulerAngles())
+        #     logger.debug(upper_body_qq.toVector4D())
+        
+# 直立姿勢から傾いたところの頂点を求める
+# FIXME クォータニオンで求められないか要調査
+def calc_slope_point(upright, rx, ry, rz):
+    # // ｘ軸回転
+    # x1 = dat[n][0] ;
+    # y1 = dat[n][1]*cos(rx)-dat[n][2]*sin(rx) ;
+    # z1 = dat[n][1]*sin(rx)+dat[n][2]*cos(rx) ;
+    x1 = upright.x()
+    y1 = upright.y() * np.cos(np.radians(rx)) - upright.z() * np.sin(np.radians(rx))
+    z1 = upright.y() * np.sin(np.radians(rx)) + upright.z() * np.cos(np.radians(rx))
+
+    # // ｙ軸回転
+    # x2 = x1*cos(ry)+z1*sin(ry) ;
+    # y2 = y1 ;
+    # z2 = z1*cos(ry)-x1*sin(ry) ;
+    x2 = x1 * np.cos(np.radians(ry)) + z1 * np.sin(np.radians(ry))
+    y2 = y1
+    z2 = z1 * np.cos(np.radians(ry)) - x1 * np.sin(np.radians(ry))
+
+    # // ｚ軸回転
+    # x3 = x2*cos(rz)-y2*sin(rz) ;
+    # y3 = x2*sin(rz)+y2*cos(rz) ;
+    # z3 = z2 ;
+    x3 = x2 * np.cos(np.radians(rz)) - y2 * np.sin(np.radians(rz))
+    y3 = x2 * np.sin(np.radians(rz)) + y2 * np.cos(np.radians(rz))
+    z3 = z2
+
+    return QVector3D(x3, y3, z3)
 
 # 3つの頂点から三角形の面積を計算する
 def calc_triangle_area(a, b, c):
+    # logger.debug(a)
+    # logger.debug(b)
+    # logger.debug(c)
+    # logger.debug("(a.y() - c.y())")
+    # logger.debug((a.y() - c.y()))
+    # logger.debug("(b.x() - c.x())")
+    # logger.debug((b.x() - c.x()))
+    # logger.debug("(b.y() - c.y())")
+    # logger.debug((b.y() - c.y()))
+    # logger.debug("(c.x() - a.x())")
+    # logger.debug((c.x() - a.x()))
     return abs(( ((a.y() - c.y()) * (b.x() - c.x())) \
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
@@ -514,9 +840,9 @@ def pos2vmd_multi(pose_3d_list, vmd_file, head_rotation_list=None, expression_fr
 
     position_list_to_vmd_multi(positions_multi, vmd_file, 0, head_rotation_list, expression_frames_list)
     
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_scale=0, xangle=0, sdecimation=0, ddecimation=0):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_xy_scale=0, center_z_scale=0, xangle=0, sdecimation=0, ddecimation=0):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_scale, xangle, sdecimation, ddecimation)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, sdecimation, ddecimation)
     
 if __name__ == '__main__':
     import sys
@@ -534,9 +860,12 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--upright-frame', dest='upright', type=int,
                         default=0,
                         help='upright frame index')
-    parser.add_argument('-c', '--center-scale', dest='center', type=int,
+    parser.add_argument('-c', '--center-xyscale', dest='centerxy', type=int,
                         default=0,
                         help='center scale')
+    parser.add_argument('-z', '--center-z-scale', dest='centerz', type=float,
+                        default=0,
+                        help='center z scale')
     parser.add_argument('-x', '--x-angle', dest='xangle', type=int,
                         default=0,
                         help='global x angle correction')
@@ -567,6 +896,6 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.center, args.xangle, args.sdecimation, args.ddecimation)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.sdecimation, args.ddecimation)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))
