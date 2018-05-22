@@ -95,21 +95,19 @@ def positions_to_frames(pos, frame=0, xangle=0):
     bf.rotation = neck_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["頭"].append(bf)
     
-    # FIXME 一旦コメントアウト
     # 左肩
-    # bf = VmdBoneFrame(frame)
-    # bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
-    # direction = pos[11] - pos[8]
-    # up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[12] - pos[11]))
-    # orientation = QQuaternion.fromDirection(direction, up)
-    # # TODO パラメータ要調整
-    # initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.5, 0), QVector3D(0, 0.5, -1.5))
-    # rotation = correctqq * orientation * initial_orientation.inverted()
-    # # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # # upper_body_rotation * bf.rotation = rotation なので、
-    # left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
-    # bf.rotation = left_shoulder_rotation
-    # bone_frame_dic["左肩"].append(bf)
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
+    direction = pos[11] - pos[8]
+    up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[14] - pos[11]))
+    orientation = QQuaternion.fromDirection(direction, up)
+    initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.8, 0), QVector3D(0.5, -0.5, -1))
+    rotation = correctqq * orientation * initial_orientation.inverted()
+    # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    # upper_body_rotation * bf.rotation = rotation なので、
+    left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
+    bf.rotation = left_shoulder_rotation
+    bone_frame_dic["左肩"].append(bf)
     
     # 左腕
     bf = VmdBoneFrame(frame)
@@ -120,8 +118,8 @@ def positions_to_frames(pos, frame=0, xangle=0):
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
     rotation = correctqq * orientation * initial_orientation.inverted()
     # 左腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # left_shoulder_rotation * upper_body_rotation * bf.rotation = rotation なので、
-    bf.rotation = upper_body_rotation.inverted() * rotation
+    # upper_body_rotation * left_shoulder_rotation * bf.rotation = rotation なので、
+    bf.rotation = left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     left_arm_rotation = bf.rotation # 後で使うので保存しておく
     bone_frame_dic["左腕"].append(bf)
     
@@ -132,29 +130,26 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = orientation * initial_orientation.inverted()
-    # ひじはX軸補正しない(Y軸にしか曲がらないから)
+    rotation = correctqq * orientation * initial_orientation.inverted()
     # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_arm_rotation * bf.rotation = rotation なので、
-    bf.rotation = left_arm_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     # bf.rotation = (upper_body_rotation * left_arm_rotation).inverted() * rotation # 別の表現
     bone_frame_dic["左ひじ"].append(bf)
     
-    # FIXME 一旦コメントアウト
     # 右肩
-    # bf = VmdBoneFrame(frame)
-    # bf.name = b'\x89\x45\x8C\xA8' # '右肩'
-    # direction = pos[14] - pos[8]
-    # up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[15] - pos[14]))
-    # orientation = QQuaternion.fromDirection(direction, up)
-    # # TODO パラメータ要調整
-    # initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.5, 0), QVector3D(0, 0.5, 1.5))
-    # rotation = correctqq * orientation * initial_orientation.inverted()
-    # # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # # upper_body_rotation * bf.rotation = rotation なので、
-    # right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
-    # bf.rotation = right_shoulder_rotation
-    # bone_frame_dic["右肩"].append(bf)
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x8C\xA8' # '右肩'
+    direction = pos[14] - pos[8]
+    up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[11] - pos[14]))
+    orientation = QQuaternion.fromDirection(direction, up)
+    initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.8, 0), QVector3D(0.5, 0.5, 1))
+    rotation = correctqq * orientation * initial_orientation.inverted()
+    # 右肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    # upper_body_rotation * bf.rotation = rotation なので、
+    right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
+    bf.rotation = right_shoulder_rotation
+    bone_frame_dic["右肩"].append(bf)
     
     # 右腕
     bf = VmdBoneFrame(frame)
@@ -164,7 +159,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
     rotation = correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = upper_body_rotation.inverted() * rotation
+    bf.rotation = right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     right_arm_rotation = bf.rotation
     bone_frame_dic["右腕"].append(bf)
     
@@ -175,9 +170,8 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    # ひじはX軸補正しない(Y軸にしか曲がらないから)
-    rotation = orientation * initial_orientation.inverted()
-    bf.rotation = right_arm_rotation.inverted() * upper_body_rotation.inverted() * rotation
+    rotation = correctqq * orientation * initial_orientation.inverted()
+    bf.rotation = right_arm_rotation.inverted() * right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["右ひじ"].append(bf)
 
     # 左足
@@ -545,6 +539,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug("((1 - smoothed_scale) ** 2)")
         # logger.debug(((1 - smoothed_scale) ** 2))
 
+        # Z軸移動位置の算出
         now_z_scale = pos_scale * (1 - smoothed_scale)
 
         # logger.debug("now_z_scale")
