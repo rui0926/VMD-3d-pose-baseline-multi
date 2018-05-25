@@ -10,7 +10,7 @@ def usage(prog):
     sys.exit()
 
 import re
-from PyQt5.QtGui import QQuaternion, QVector3D, QVector2D
+from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QVector2D, QMatrix4x4
 from VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
 import argparse
 import logging
@@ -38,7 +38,9 @@ bone_frame_dic = {
     "右足":[],
     "右ひざ":[],
     "センター":[],
-    "グルーブ":[]
+    "グルーブ":[],
+    "左足ＩＫ":[],
+    "右足ＩＫ":[]
 }
 
 def positions_to_frames(pos, frame=0, xangle=0):
@@ -132,7 +134,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
     rotation = correctqq * orientation * initial_orientation.inverted()
     # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * left_arm_rotation * bf.rotation = rotation なので、
+    # upper_body_rotation * left_shoulder_rotation * left_arm_rotation * bf.rotation = rotation なので、
     bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     # bf.rotation = (upper_body_rotation * left_arm_rotation).inverted() * rotation # 別の表現
     bone_frame_dic["左ひじ"].append(bf)
@@ -230,17 +232,16 @@ def positions_to_frames(pos, frame=0, xangle=0):
     bf.name = b'\x83\x4F\x83\x8B\x81\x5B\x83\x75' # 'グルーブ'
     bone_frame_dic["グルーブ"].append(bf)
 
+    # 左足ＩＫ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x91\xab\x82\x68\x82\x6a' # '左足ＩＫ'
+    bone_frame_dic["左足ＩＫ"].append(bf)
 
-def make_showik_frames():
-    frames = []
-    sf = VmdShowIkFrame()
-    sf.show = 1
-    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x91\xab\x82\x68\x82\x6a', 0)) # '左足ＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x89\x45\x91\xab\x82\x68\x82\x6a', 0)) # '右足ＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '左つま先ＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '右つま先ＩＫ'
-    frames.append(sf)
-    return frames
+    # 右足ＩＫ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x91\xab\x82\x68\x82\x6a' # '右足ＩＫ'
+    bone_frame_dic["右足ＩＫ"].append(bf)
+
 
 def read_positions(position_file):
     """Read joint position data"""
@@ -308,6 +309,12 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     # センターの計算
     calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale)
 
+    # IKの計算
+    calc_IK(bone_csv_file)
+
+    # グルーブ移管
+    set_groove(bone_csv_file)
+
 
     # フレームの間引き
 # TODO
@@ -319,17 +326,149 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
         for bf in v:
             bone_frames.append(bf)
 
-    showik_frames = make_showik_frames()
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
-    writer.write_vmd_file(vmd_file, bone_frames, showik_frames)
+    writer.write_vmd_file(vmd_file, bone_frames)
+
+# IKの計算
+def calc_IK(bone_csv_file):
+    logger.debug("bone_csv_file: "+ bone_csv_file)
+
+    # ボーンファイルを開く
+    with open(bone_csv_file, "r") as bf:
+        reader = csv.reader(bf)
+
+        for row in reader:
+
+            if row[1] == "下半身":
+                # 下半身ボーン
+                lower_body_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足":
+                # 左足ボーン
+                left_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左ひざ":
+                # 左ひざボーン
+                left_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足首":
+                # 左足首ボーン
+                left_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足":
+                # 右足ボーン
+                right_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右ひざ":
+                # 右ひざボーン
+                right_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足首":
+                # 右足首ボーン
+                right_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[0] == "Bone" and row[1] == "左足ＩＫ":
+                # 左足ＩＫボーン
+                left_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[0] == "Bone" and row[1] == "右足ＩＫ":
+                # 右足ＩＫボーン
+                right_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "センター":
+                # センターボーン
+                center_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+    for n in range(len(bone_frame_dic["左足"])):
+        logger.debug("左足IK計算 frame={0} -------------------------------".format(n))
+
+        # 左足IK
+        left_tip_pos = \
+            calc_IK_matrix(center_bone, lower_body_bone, left_leg_bone, left_knee_bone, left_ankle_bone, left_leg_ik_bone \
+                , bone_frame_dic["センター"][n].position \
+                , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["左足"][n].rotation, bone_frame_dic["左ひざ"][n].rotation )
+
+        bone_frame_dic["左足ＩＫ"][n].position = left_tip_pos
+        # bone_frame_dic["左足ＩＫ"][n].rotation = left_leg_ik
+        bone_frame_dic["左足"][n].rotation = QQuaternion()
+        bone_frame_dic["左ひざ"][n].rotation = QQuaternion()
+
+        # 右足IK
+        right_tip_pos = \
+            calc_IK_matrix(center_bone, lower_body_bone, right_leg_bone, right_knee_bone, right_ankle_bone, right_leg_ik_bone \
+                , bone_frame_dic["センター"][n].position \
+                , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["右足"][n].rotation, bone_frame_dic["右ひざ"][n].rotation )
+
+        bone_frame_dic["右足ＩＫ"][n].position = right_tip_pos
+        # bone_frame_dic["右足ＩＫ"][n].rotation = right_leg_ik
+        bone_frame_dic["右足"][n].rotation = QQuaternion()
+        bone_frame_dic["右ひざ"][n].rotation = QQuaternion()
+
+
+
+# 行列でIKの位置を求める
+def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone, ik_bone, center_pos, lower_body_rotation, leg_rotation, knee_rotation):
+
+    # ローカル位置
+    trans_vs = [0 for i in range(5)]
+    # センターのローカル位置
+    trans_vs[0] = center_bone + center_pos - ik_bone
+    # 下半身のローカル位置
+    trans_vs[1] = lower_body_bone - center_bone
+    # 足のローカル位置
+    trans_vs[2] = leg_bone - lower_body_bone
+    # ひざのローカル位置 
+    trans_vs[3] = knee_bone - leg_bone
+    # 足首のローカル位置
+    trans_vs[4] = ankle_bone - knee_bone
+    
+    # 加算用クォータニオン
+    add_qs = [0 for i in range(5)]
+    # センターの回転
+    add_qs[0] = QQuaternion()
+    # 下半身の回転
+    add_qs[1] = lower_body_rotation
+    # 足の回転
+    add_qs[2] = leg_rotation
+    # ひざの回転
+    add_qs[3] = knee_rotation
+    # 足首の回転
+    add_qs[4] = QQuaternion()
+
+    # 行列
+    matrixs = [0 for i in range(5)]
+
+    for n in range(len(matrixs)):
+        # 行列を生成
+        matrixs[n] = QMatrix4x4()
+        # 移動
+        matrixs[n].translate(trans_vs[n])
+        # 回転
+        matrixs[n].rotate(add_qs[n])
+
+        # logger.debug("matrixs[n] n={0}".format(n))
+        # logger.debug(matrixs[n])
+
+    # ひざの位置
+    knee_pos = matrixs[0] * matrixs[1] * matrixs[2] * QVector4D(trans_vs[3], 1)
+
+    logger.debug("knee_pos")
+    logger.debug(knee_pos.toVector3D())
+
+    # 足首の位置回転後(行列の最後は掛けない)
+    tip_pos = matrixs[0] * matrixs[1] * matrixs[2] * matrixs[3] * QVector4D(trans_vs[4], 1)
+
+    logger.debug("tip_pos")
+    logger.debug(tip_pos.toVector3D())
+
+    return tip_pos.toVector3D()
+
 
 # センターの計算
 def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale):
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
-    # グルーブボーンがあるか
-    is_groove = False
-    # ボーンファイルをShiftJISで開く
+    # ボーンファイルを開く
     with open(bone_csv_file, "r") as bf:
         reader = csv.reader(bf)
 
@@ -346,21 +485,6 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
             if row[1] == "左足":
                 # 左足ボーン
                 left_leg_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
-
-            if row[1] == "上半身":
-                # 上半身ボーン
-                upper_body_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
-
-            if row[1] == "下半身":
-                # 下半身ボーン
-                under_body_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
-
-            if row[1] == "センター":
-                # センターボーン
-                center_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
-
-            if row[1] == "グルーブ":
-                is_groove = True
 
     smoothed_2d = [[0 for i in range(3)] for j in range(len(bone_frame_dic["首"]))]
     n = 0
@@ -447,12 +571,8 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # 足の上下差
         leg_diff = upright_leg_avg - leg_avg
 
-        # Y軸移動
-        if is_groove:
-            # グルーブがある場合には、そっちに割り当てる
-            bone_frame_dic["グルーブ"][n].position.setY(leg_diff * upright_xy_scale)
-        else:
-            bone_frame_dic["センター"][n].position.setY(leg_diff * upright_xy_scale)
+        # Y軸移動(とりあえずセンター固定)
+        bone_frame_dic["センター"][n].position.setY(leg_diff * upright_xy_scale)
         
         # 首・左足・右足の中心部分をX軸移動
         x_avg = ((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3) \
@@ -722,6 +842,30 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         #     logger.debug(upper_body_qq.toEulerAngles())
         #     logger.debug(upper_body_qq.toVector4D())
         
+# センターY軸をグルーブY軸に移管
+def set_groove(bone_csv_file):
+
+    # グルーブボーンがあるか
+    is_groove = False
+    # ボーンファイルを開く
+    with open(bone_csv_file, "r") as bf:
+        reader = csv.reader(bf)
+
+        for row in reader:
+            if row[1] == "グルーブ":
+                is_groove = True
+                break
+
+    if is_groove:
+
+        for n in range(len(bone_frame_dic["センター"])):
+            logger.debug("グルーブ移管 frame={0}".format(n))
+
+            # グルーブがある場合、Y軸をグルーブに設定
+            bone_frame_dic["グルーブ"][n].position = QVector3D(0, bone_frame_dic["センター"][n].position.y(), 0)
+            bone_frame_dic["センター"][n].position = QVector3D(bone_frame_dic["センター"][n].position.x(), 0, bone_frame_dic["センター"][n].position.z())
+
+
 # 直立姿勢から傾いたところの頂点を求める
 # FIXME クォータニオンで求められないか要調査
 def calc_slope_point(upright, rx, ry, rz):
