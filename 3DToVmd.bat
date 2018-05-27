@@ -56,7 +56,7 @@ rem ---  グローバルX軸角度補正
 echo --------------
 set GROBAL_X_ANGLE=16
 echo 3D化した際にグローバルX軸に若干傾くのを補正します
-echo 0～360度の整数のみを入力して下さい。
+echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_X_ANGLE%度回転します。
 set /P GROBAL_X_ANGLE="グローバルX軸角度補正: "
 
@@ -67,6 +67,7 @@ set CENTER_DECIMATION_MOVE=0.5
 echo センターキーの間引きに使用する移動量を数値(小数可)で指定します
 echo 指定された範囲内の移動があった場合に間引きされます。
 echo 何も入力せず、ENTERを押下した場合、「%CENTER_DECIMATION_MOVE%」の移動量で間引きます。
+echo 以降に続く間引きパラメータをすべて0にした場合、間引き処理は行いません。
 set /P CENTER_DECIMATION_MOVE="センター移動間引き量: "
 
 rem ---  IK移動間引き量
@@ -84,7 +85,7 @@ echo --------------
 set SAME_DECIMATION_ANGLE=15
 echo 回転キーの間引きに使用する角度を指定します
 echo 同じ軸(X軸方向への回転が続く場合等)に指定された角度以内の回転があった場合に間引きされます。
-echo 0～360度の整数のみを入力して下さい。
+echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%SAME_DECIMATION_ANGLE%度間引きます。
 set /P SAME_DECIMATION_ANGLE="同軸間引き角度: "
 
@@ -94,7 +95,7 @@ echo --------------
 set DIFF_DECIMATION_ANGLE=3
 echo 回転キーの間引きに使用する角度を指定します
 echo 違うじ軸(X軸方向への回転からZ軸方向に回転した場合等)に指定された角度以内の回転があった場合に間引きされます。
-echo 0～360度の整数のみを入力して下さい。
+echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%DIFF_DECIMATION_ANGLE%度間引きます。
 set /P DIFF_DECIMATION_ANGLE="異軸間引き角度: "
 
