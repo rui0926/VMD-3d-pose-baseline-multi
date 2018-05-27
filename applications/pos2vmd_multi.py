@@ -17,6 +17,7 @@ import logging
 import datetime
 import numpy as np
 import csv
+from decimal import Decimal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -296,7 +297,7 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_xy_scale=0, center_z_scale=0, xangle=0, sdecimation=0, ddecimation=0):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation):
     writer = VmdWriter()
 
     logger.info("角度計算開始")
@@ -319,10 +320,14 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     # グルーブ移管
     set_groove(bone_csv_file)
 
+    if mdecimation > 0 or idecimation > 0 or sdecimation > 0 or ddecimation > 0:
+        logger.info("間引き開始")
 
-    # フレームの間引き
-# TODO
-#    decimate_born_frames(sdecimation, ddecimation)
+        # 間引き
+        for k,v in bone_frame_dic.items():
+            decimate_bone_frames(k, mdecimation, idecimation, sdecimation, ddecimation)
+
+    logger.info("VMD出力開始")
 
     # ディクショナリ型の疑似二次元配列から、一次元配列に変換
     bone_frames = []
@@ -332,6 +337,153 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
 
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     writer.write_vmd_file(vmd_file, bone_frames)
+
+def decimate_bone_frames(bone_name, mdecimation, idecimation, sdecimation, ddecimation):
+    newbfs = []
+
+    is_rot_hold = False
+    is_pos_hold = False
+    for n in range(len(bone_frame_dic[bone_name])):
+        logger.debug("decimate_bone_frames n={0}".format(n))
+        
+        if n == 0:
+            # 初回は問答無用
+            newbfs.append(bone_frame_dic[bone_name][n])
+        else:
+            # 2つ前のフレーム
+            if len(newbfs) < 2:
+                prev2bf = newbfs[len(newbfs) - 1]
+            else:
+                prev2bf = newbfs[len(newbfs) - 2]
+
+            # 1つ前のフレーム
+            prev1bf = newbfs[len(newbfs) - 1]
+            # 現在のフレーム
+            nowbf = bone_frame_dic[bone_name][n]
+
+            if (( bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ" ) \
+                and ( abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) <= idecimation / 10 \
+                and abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) <= idecimation / 10 \
+                and abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) <= idecimation / 10 ) ) :
+                # 移動量がほとんどない場合、一時保留する
+                is_pos_hold = True
+            else:
+                if is_pos_hold:
+                    # 移動が動き始めた場合、保持FLG=ONの場合、前回のをコピーする
+                    nowbf.position = prev1bf.position if is_pos_hold else nowbf.position
+                    newbfs.append(nowbf)
+                    is_pos_hold = False
+                    continue
+
+            if ( ( bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ" ) \
+                and (abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= 1 \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= 1 \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= 1)) :
+                # 回転もがほとんどない場合、一時保留する
+                is_rot_hold = True
+            else:
+                if is_rot_hold:
+                    # 回転が動き始めた場合、保持FLG=ONの場合、前回のをコピーする
+                    nowbf.rotation = prev1bf.rotation if is_rot_hold else nowbf.rotation
+                    newbfs.append(nowbf)
+                    is_rot_hold = False
+                    continue
+             
+            # # 移動か回転が動いた場合、前回のを登録する
+            # if is_pos_hold == False or is_rot_hold == False:
+            #     newbfs.append(nowbf)
+            #     continue
+
+            # ○A-○B-○C　の移動パターン
+            # ○A-○B の移動差分
+            prev_pos_diff = prev2bf.position - prev1bf.position
+            # ○B-○C の移動差分
+            now_pos_diff = prev1bf.position - nowbf.position
+
+            # logger.debug("prev2bf.position")
+            # logger.debug(prev2bf.position)
+            # logger.debug("prev1bf.position")
+            # logger.debug(prev1bf.position)
+            # logger.debug("nowbf.position")
+            # logger.debug(nowbf.position)
+            # logger.debug("prev_diff")
+            # logger.debug(prev_pos_diff)
+            # logger.debug("now_pos_diff")
+            # logger.debug(now_pos_diff)
+
+            # 前回と今回の移動差分の内積(マイナスの場合、鈍角で移動が大きい？)
+            dot_pos_diff = QVector3D.dotProduct(prev_pos_diff, now_pos_diff)
+
+            # logger.debug("dot_pos_diff")
+            # logger.debug(dot_pos_diff)
+            
+            # 前回と今回の移動の回転量(グローブ用。Z軸回りに回転180すると、上下運動が反転する)
+            diff_pos_rotation = QQuaternion.rotationTo(prev_pos_diff, now_pos_diff)
+
+            # logger.debug("diff_pos_rotation")
+            # logger.debug(diff_pos_rotation.toEulerAngles())
+
+            # # ○A-○B の移動差分
+            # prev_rot_diff = prev2bf.rotation - prev1bf.rotation
+            # # ○B-○C の移動差分
+            # now_rot_diff = prev1bf.rotation - nowbf.rotation
+
+            # logger.debug("prev_rot_diff")
+            # logger.debug(prev_rot_diff)
+            # logger.debug(prev_rot_diff.toEulerAngles())
+            # logger.debug("now_rot_diff")
+            # logger.debug(now_rot_diff)
+            # logger.debug(now_rot_diff.toEulerAngles())
+
+            if bone_name == "センター" or bone_name == "グルーブ":
+                if ((abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) > mdecimation) \
+                    or (abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) > mdecimation) \
+                    or (abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) > mdecimation) \
+                    or (dot_pos_diff < 0) \
+                    or (abs(diff_pos_rotation.toEulerAngles().z()) == 180)) :
+
+                    # センター・グルーブの移動量が一定ならば追加
+                    newbfs.append(nowbf)
+                    continue
+            
+            if bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ":
+                if ((abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) > idecimation) \
+                    or (abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) > idecimation) \
+                    or (abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) > idecimation)) :
+
+                    # 移動量が一定量が超えたら、登録
+                    if is_pos_hold:
+                        nowbf.position = prev1bf.position
+
+                    # IKの移動量が一定ならば追加
+                    newbfs.append(nowbf)
+                    continue
+
+            if ( ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) > sdecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= ddecimation ) \
+                or \
+                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) > sdecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= ddecimation ) \
+                or \
+                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) > sdecimation ) \
+                or \
+                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) > ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) > ddecimation \
+                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) > ddecimation ) ) :
+
+                # 同軸回転もしくは異軸回転が規定値を超えていた場合、登録
+                newbfs.append(nowbf)
+
+            # if n > 200:
+            #     sys.exit()
+
+    # 間引きしたフレームを登録しなおす
+    bone_frame_dic[bone_name] = newbfs
+
 
 # IKの計算
 def calc_IK(bone_csv_file):
@@ -1055,76 +1207,9 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-
-
-# ボーンのキーフレーム間引き
-def decimate_born_frames(sdecimation, ddecimation):
-
-    for k,v in bone_frame_dic.items():
-        logger.debug("フレーム間引き開始 k={0}, v={1}".format(k, len(v)))
-
-        newbfs = []
-        for bf in v:
-            # 各ボーンごとのキーフレーム配列を展開
-            if len(newbfs) == 0:
-                # 最初は問答無用
-                newbfs.append(bf)
-            else:
-                # 2フレーム目からは差分をとる
-
-                if len(newbfs) >= 2:
-                    #2つ以上キーフレームがある場合
-
-                    # 2つ前から1つ前への回転              
-                    diff1qq = newbfs[len(newbfs) - 2].rotation.normalized() * newbfs[len(newbfs) - 1].rotation.normalized()
-
-                    # 1つ前から現在への回転                    
-                    diff2qq = newbfs[len(newbfs) - 1].rotation.normalized() * bf.rotation.normalized()
-                    
-                    logger.debug("diff チェック")
-                    logger.debug(diff1qq)
-                    logger.debug(diff2qq)
-
-                    # if abs(prev_angle.x() - now_angle.x()) >= sdecimation \
-                    #     or abs(prev_angle.y() - now_angle.y()) >= sdecimation \
-                    #     or abs(prev_angle.z() - now_angle.z()) >= sdecimation :
-                    #     # どれかの角度が間引き分より大きい場合、新規bfに登録
-
-                    #     newbfs.append(bf)
-
-
-
-
-                else:
-                    #キーフレームが1つだけの場合
-
-                    # 差分の角度を求める
-                    prev_angle = newbfs[len(newbfs) - 1].rotation.toEulerAngles()
-                    now_angle = bf.rotation.toEulerAngles()
-
-                    if abs(prev_angle.x() - now_angle.x()) >= sdecimation \
-                        or abs(prev_angle.y() - now_angle.y()) >= sdecimation \
-                        or abs(prev_angle.z() - now_angle.z()) >= sdecimation :
-                        # どれかの角度が間引き分より大きい場合、新規bfに登録
-
-                        newbfs.append(bf)
-
-        # ループが終わったら、新規bfを辞書に上書き
-        bone_frame_dic[k] = newbfs
-
-
-def pos2vmd_multi(pose_3d_list, vmd_file, head_rotation_list=None, expression_frames_list=None):
-    positions_multi = []
-
-    for pose_3d in pose_3d_list:
-        positions = convert_position(pose_3d)
-        positions_multi.append(positions)
-
-    position_list_to_vmd_multi(positions_multi, vmd_file, 0, head_rotation_list, expression_frames_list)
-    
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx=0, center_xy_scale=0, center_z_scale=0, xangle=0, sdecimation=0, ddecimation=0):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, sdecimation, ddecimation)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation)
     
 if __name__ == '__main__':
     import sys
@@ -1157,6 +1242,12 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--difference-born-decimation', dest='ddecimation', type=int,
                         default=0,
                         help='born frame difference decimation angle')
+    parser.add_argument('-m', '--center-move-born-decimation', dest='mdecimation', type=float,
+                        default=0,
+                        help='born frame center decimation move')
+    parser.add_argument('-i', '--ik-move-born-decimation', dest='idecimation', type=float,
+                        default=0,
+                        help='born frame ik decimation move')
     args = parser.parse_args()
 
     # resultディレクトリだけ指定させる
@@ -1178,6 +1269,6 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.sdecimation, args.ddecimation)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.sdecimation, args.ddecimation)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))
