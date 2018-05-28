@@ -48,7 +48,9 @@ def positions_to_frames(pos, frame=0, xangle=0):
     logger.debug("角度計算 frame={0}".format(str(frame)))
 
 	# 補正角度のクォータニオン
-    correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle, 0, 0))
+    decrease_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 0.5, 0, 0))
+    increase_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 2, 0, 0))
+    normal_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle, 0, 0))
 
     """convert positions to bone frames"""
     # 上半身
@@ -58,10 +60,20 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
     upper_body_orientation = QQuaternion.fromDirection(direction, up)
     initial = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
-    # 補正をかけて回転する
-    bf.rotation = correctqq * upper_body_orientation * initial.inverted()
+    upper_body_rotation = upper_body_orientation * initial.inverted()
 
-    upper_body_rotation = bf.rotation
+    # 補正をかけて回転する
+    if upper_body_rotation.toEulerAngles().y() < 30 and upper_body_rotation.toEulerAngles().y() > -30:
+        # 前向きは増量補正
+        upper_body_rotation = upper_body_rotation * increase_correctqq
+    elif upper_body_rotation.toEulerAngles().y() < -120 or upper_body_rotation.toEulerAngles().y() > 120:
+        # 後ろ向きは通常補正
+        upper_body_rotation = upper_body_rotation * normal_correctqq
+    else:
+        # 横向きは減少補正
+        upper_body_rotation = upper_body_rotation * decrease_correctqq
+
+    bf.rotation = upper_body_rotation
     bone_frame_dic["上半身"].append(bf)
     
     # 下半身
@@ -71,7 +83,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct(direction, (pos[4] - pos[1]))
     lower_body_orientation = QQuaternion.fromDirection(direction, up)
     initial = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(0, 0, 1))
-    bf.rotation = correctqq * lower_body_orientation * initial.inverted()
+    bf.rotation = lower_body_orientation * initial.inverted() * normal_correctqq
     lower_body_rotation = bf.rotation
     bone_frame_dic["下半身"].append(bf)
 
@@ -82,7 +94,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
     neck_orientation = QQuaternion.fromDirection(up, direction)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, -1, 0))
-    rotation = correctqq * neck_orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * neck_orientation * initial_orientation.inverted()
     bf.rotation = upper_body_orientation.inverted() * rotation
     neck_rotation = bf.rotation
     bone_frame_dic["首"].append(bf)
@@ -94,7 +106,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[9] - pos[8]), (pos[10] - pos[9]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = neck_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["頭"].append(bf)
     
@@ -105,7 +117,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[14] - pos[11]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.8, 0), QVector3D(0.5, -0.5, -1))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * bf.rotation = rotation なので、
     left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
@@ -119,7 +131,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     # 左腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * bf.rotation = rotation なので、
     bf.rotation = left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
@@ -133,7 +145,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * left_arm_rotation * bf.rotation = rotation なので、
     bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
@@ -147,7 +159,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[11] - pos[14]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.8, 0), QVector3D(0.5, 0.5, 1))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     # 右肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * bf.rotation = rotation なので、
     right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
@@ -161,7 +173,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     right_arm_rotation = bf.rotation
     bone_frame_dic["右腕"].append(bf)
@@ -173,7 +185,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = increase_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_arm_rotation.inverted() * right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["右ひじ"].append(bf)
 
@@ -184,7 +196,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = lower_body_rotation.inverted() * rotation
     left_leg_rotation = bf.rotation
     bone_frame_dic["左足"].append(bf)
@@ -196,7 +208,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = left_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
     bone_frame_dic["左ひざ"].append(bf)
 
@@ -207,7 +219,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = lower_body_rotation.inverted() * rotation
     right_leg_rotation = bf.rotation
     bone_frame_dic["右足"].append(bf)
@@ -219,7 +231,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = correctqq * orientation * initial_orientation.inverted()
+    rotation = normal_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
     bone_frame_dic["右ひざ"].append(bf)
     
