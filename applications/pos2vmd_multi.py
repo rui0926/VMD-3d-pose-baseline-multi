@@ -9,8 +9,9 @@ def usage(prog):
     print('usage: ' + prog + ' POSITION_FILE VMD_FILE')
     sys.exit()
 
+import os
 import re
-from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QVector2D, QMatrix4x4
+from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QMatrix4x4
 from VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
 import argparse
 import logging
@@ -18,9 +19,16 @@ import datetime
 import numpy as np
 import csv
 from decimal import Decimal
+from matplotlib import pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+level = {0:logging.ERROR,
+            1:logging.WARNING,
+            2:logging.INFO,
+            3:logging.DEBUG}
+verbose = 2
 
 # ディクショナリ型で各ボーンごとのキーフレームリストを作成する
 bone_frame_dic = {
@@ -49,7 +57,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
 
 	# 補正角度のクォータニオン
     decrease_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 0.5, 0, 0))
-    increase_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 2, 0, 0))
+    increase_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 1.5, 0, 0))
     normal_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle, 0, 0))
 
     """convert positions to bone frames"""
@@ -65,14 +73,15 @@ def positions_to_frames(pos, frame=0, xangle=0):
     # 補正をかけて回転する
     if upper_body_rotation.toEulerAngles().y() < 30 and upper_body_rotation.toEulerAngles().y() > -30:
         # 前向きは増量補正
-        upper_body_rotation = upper_body_rotation * increase_correctqq
+        upper_correctqq = increase_correctqq
     elif upper_body_rotation.toEulerAngles().y() < -120 or upper_body_rotation.toEulerAngles().y() > 120:
         # 後ろ向きは通常補正
-        upper_body_rotation = upper_body_rotation * normal_correctqq
+        upper_correctqq = normal_correctqq
     else:
         # 横向きは減少補正
-        upper_body_rotation = upper_body_rotation * decrease_correctqq
+        upper_correctqq = decrease_correctqq
 
+    upper_body_rotation = upper_body_rotation * upper_correctqq
     bf.rotation = upper_body_rotation
     bone_frame_dic["上半身"].append(bf)
     
@@ -83,8 +92,21 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct(direction, (pos[4] - pos[1]))
     lower_body_orientation = QQuaternion.fromDirection(direction, up)
     initial = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(0, 0, 1))
-    bf.rotation = lower_body_orientation * initial.inverted() * normal_correctqq
-    lower_body_rotation = bf.rotation
+    lower_body_rotation = lower_body_orientation * initial.inverted()
+
+    # 補正をかけて回転する
+    if lower_body_rotation.toEulerAngles().y() < 30 and lower_body_rotation.toEulerAngles().y() > -30:
+        # 前向きは通常補正
+        lower_correctqq = normal_correctqq
+    elif lower_body_rotation.toEulerAngles().y() < -120 or lower_body_rotation.toEulerAngles().y() > 120:
+        # 後ろ向きは通常補正
+        lower_correctqq = normal_correctqq
+    else:
+        # 横向きは減少補正
+        lower_correctqq = decrease_correctqq
+
+    lower_body_rotation = lower_body_rotation * lower_correctqq
+    bf.rotation = lower_body_rotation
     bone_frame_dic["下半身"].append(bf)
 
     # 首
@@ -117,7 +139,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[14] - pos[11]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.8, 0), QVector3D(0.5, -0.5, -1))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * bf.rotation = rotation なので、
     left_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
@@ -131,7 +153,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     # 左腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * bf.rotation = rotation なので、
     bf.rotation = left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
@@ -145,7 +167,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * left_arm_rotation * bf.rotation = rotation なので、
     bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
@@ -159,7 +181,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[11] - pos[14]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.8, 0), QVector3D(0.5, 0.5, 1))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     # 右肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * bf.rotation = rotation なので、
     right_shoulder_rotation = upper_body_rotation.inverted() * rotation # 後で使うので保存しておく
@@ -173,7 +195,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     right_arm_rotation = bf.rotation
     bone_frame_dic["右腕"].append(bf)
@@ -185,7 +207,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = increase_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_arm_rotation.inverted() * right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["右ひじ"].append(bf)
 
@@ -196,7 +218,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = normal_correctqq * orientation * initial_orientation.inverted()
+    rotation = lower_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = lower_body_rotation.inverted() * rotation
     left_leg_rotation = bf.rotation
     bone_frame_dic["左足"].append(bf)
@@ -208,7 +230,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = normal_correctqq * orientation * initial_orientation.inverted()
+    rotation = lower_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = left_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
     bone_frame_dic["左ひざ"].append(bf)
 
@@ -219,7 +241,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = normal_correctqq * orientation * initial_orientation.inverted()
+    rotation = lower_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = lower_body_rotation.inverted() * rotation
     right_leg_rotation = bf.rotation
     bone_frame_dic["右足"].append(bf)
@@ -231,7 +253,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = normal_correctqq * orientation * initial_orientation.inverted()
+    rotation = lower_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = right_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
     bone_frame_dic["右ひざ"].append(bf)
     
@@ -309,7 +331,7 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment):
     writer = VmdWriter()
 
     logger.info("角度計算開始")
@@ -327,17 +349,59 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     # IKの計算
     calc_IK(bone_csv_file)
 
+    # bf_x = []
+    # bf_y = []
+    # bf_z = []
+    # for bf in bone_frame_dic["センター"][500:600]:
+    #     bf_x.append(bf.position.x())
+    #     bf_y.append(bf.position.y())
+    #     bf_z.append(bf.position.z())
+
+    # logger.info("bf_x")
+    # logger.info(bf_x)
+    # logger.info("bf_y")
+    # logger.info(bf_y)
+    # logger.info("bf_z")
+    # logger.info(bf_z)
+
     logger.info("グルーブ移管開始")
 
     # グルーブ移管
-    set_groove(bone_csv_file)
+    is_groove = set_groove(bone_csv_file)
 
-    if mdecimation > 0 or idecimation > 0 or sdecimation > 0 or ddecimation > 0:
-        logger.info("間引き開始")
+    if mdecimation > 0 or idecimation > 0 or ddecimation > 0:
+        
+        base_dir = os.path.dirname(vmd_file)
 
-        # 間引き
-        for k,v in bone_frame_dic.items():
-            decimate_bone_frames(k, mdecimation, idecimation, sdecimation, ddecimation)
+        if alignment == True:
+            logger.info("揃えて間引き開始")
+            # 揃えて間引き
+            decimate_bone_center_frames_array(base_dir, is_groove, mdecimation)
+            decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ", "左足"], idecimation, ddecimation)
+            decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ", "右足"], idecimation, ddecimation)
+            # decimate_bone_rotation_frames_array(["上半身"], ddecimation)
+            # decimate_bone_rotation_frames_array(["下半身"], ddecimation)
+            decimate_bone_rotation_frames_array(["上半身", "下半身"], ddecimation)
+            decimate_bone_rotation_frames_array(["首", "頭"], ddecimation)
+            decimate_bone_rotation_frames_array(["左ひじ", "左腕", "左肩"], ddecimation)
+            decimate_bone_rotation_frames_array(["右ひじ", "右腕", "右肩"], ddecimation)
+        else:
+            logger.info("通常間引き開始")
+            decimate_bone_center_frames_array(base_dir, is_groove, mdecimation)
+            decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ"], idecimation, ddecimation)
+            decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ"], idecimation, ddecimation)
+            decimate_bone_rotation_frames_array(["上半身"], ddecimation)
+            decimate_bone_rotation_frames_array(["下半身"], ddecimation)
+            decimate_bone_rotation_frames_array(["左足"], ddecimation)
+            decimate_bone_rotation_frames_array(["右足"], ddecimation)
+            decimate_bone_rotation_frames_array(["首"], ddecimation)
+            decimate_bone_rotation_frames_array(["頭"], ddecimation)
+            decimate_bone_rotation_frames_array(["左ひじ"], ddecimation)
+            decimate_bone_rotation_frames_array(["左腕"], ddecimation)
+            decimate_bone_rotation_frames_array(["左肩"], ddecimation)
+            decimate_bone_rotation_frames_array(["右ひじ"], ddecimation)
+            decimate_bone_rotation_frames_array(["右腕"], ddecimation)
+            decimate_bone_rotation_frames_array(["右肩"], ddecimation)
 
     logger.info("VMD出力開始")
 
@@ -350,151 +414,643 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     writer.write_vmd_file(vmd_file, bone_frames)
 
-def decimate_bone_frames(bone_name, mdecimation, idecimation, sdecimation, ddecimation):
-    newbfs = []
+# センターボーンを間引きする
+def decimate_bone_center_frames_array(base_dir, is_groove, mdecimation):
 
-    is_rot_hold = False
-    is_pos_hold = False
-    for n in range(len(bone_frame_dic[bone_name])):
-        logger.debug("decimate_bone_frames n={0}".format(n))
+    base_center_x = []
+    base_center_y = []
+    base_center_z = []
+    for bf in bone_frame_dic["センター"]:
+        base_center_x.append(bf.position.x())
+        base_center_y.append(bf.position.y())
+        base_center_z.append(bf.position.z())
+
+    base_groove_y = []
+    for bf in bone_frame_dic["グルーブ"]:
+        base_groove_y.append(bf.position.y())
+
+    # フィットさせたフレーム情報
+    fit_frames = []
+    fit_center_x_points = []
+    fit_center_y_points = []
+    fit_center_z_points = []
+    fit_groove_y_points = []
+
+    for n in range(len(base_center_x)):
+        logger.debug("decimate_bone_center_frames_array n={0} ------------- ".format(n))
         
+        # 最初は固定登録
         if n == 0:
-            # 初回は問答無用
-            newbfs.append(bone_frame_dic[bone_name][n])
+            fit_frames.append(n)
+            fit_center_x_points.append(base_center_x[n])
+            fit_center_y_points.append(base_center_y[n])
+            fit_center_z_points.append(base_center_z[n])
+            fit_groove_y_points.append(base_groove_y[n])
+            continue
+            
+        # 前のキーフレームのXY（2点）
+        prev_x1 = np.array(fit_center_x_points[-2:])
+        prev_y1 = np.array(fit_center_y_points[-2:])
+        prev_z1 = np.array(fit_center_z_points[-2:])
+
+        logger.debug("prev_x1")
+        logger.debug(prev_x1)
+        logger.debug("prev_y1")
+        logger.debug(prev_y1)
+        logger.debug("prev_z1")
+        logger.debug(prev_z1)
+        
+        # 登録対象キーフレームのXY
+        now_x1 = np.array(base_center_x[0+n:3+n])
+        now_y1 = np.array(base_center_y[0+n:3+n])
+        now_z1 = np.array(base_center_z[0+n:3+n])
+        
+        # 登録対象キーフレームのXY
+        now_long_x1 = np.array(base_center_x[0+n:6+n])
+        now_long_y1 = np.array(base_center_y[0+n:6+n])
+        now_long_z1 = np.array(base_center_z[0+n:6+n])
+        
+        logger.debug("now_x1")
+        logger.debug(now_x1)
+        logger.debug("now_y1")
+        logger.debug(now_y1)
+        logger.debug("now_z1")
+        logger.debug(now_z1)
+
+        # 前のキーフレームの近似直線(XY)
+        if len(prev_x1) <= 1 or ( np.average(prev_x1) == prev_x1[0] and np.average(prev_y1) == prev_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0
+            prev_poly_xy_angle = 0
         else:
-            # 2つ前のフレーム
-            if len(newbfs) < 2:
-                prev2bf = newbfs[len(newbfs) - 1]
-            else:
-                prev2bf = newbfs[len(newbfs) - 2]
+            prev_poly_xy_fit1 = np.polyfit(prev_x1, prev_y1, 1)
+            # prev_poly_xy_fit1_y_func = np.poly1d(prev_poly_xy_fit1)
+            # 近似直線の角度
+            prev_poly_xy_angle = np.rad2deg(np.arctan(prev_poly_xy_fit1[0]))
 
-            # 1つ前のフレーム
-            prev1bf = newbfs[len(newbfs) - 1]
-            # 現在のフレーム
-            nowbf = bone_frame_dic[bone_name][n]
+        logger.debug("prev_poly_xy_angle")
+        logger.debug(prev_poly_xy_angle)
+        
+        if len(now_x1) <= 1 or ( np.average(now_x1) == now_x1[0] and np.average(now_y1) == now_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0
+            now_poly_xy_angle = 0
+        else:
+            # 登録対象キーフレームの近似直線(XY)
+            now_poly_xy_fit1 = np.polyfit(now_x1, now_y1, 1)
+            # now_poly_xy_fit1_y_func = np.poly1d(now_poly_xy_fit1)
+            # 近似直線の角度
+            now_poly_xy_angle = np.rad2deg(np.arctan(now_poly_xy_fit1[0]))
 
-            if (( bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ" ) \
-                and ( abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) <= idecimation / 10 \
-                and abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) <= idecimation / 10 \
-                and abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) <= idecimation / 10 ) ) :
-                # 移動量がほとんどない場合、一時保留する
-                is_pos_hold = True
-            else:
-                if is_pos_hold:
-                    # 移動が動き始めた場合、保持FLG=ONの場合、前回のをコピーする
-                    nowbf.position = prev1bf.position if is_pos_hold else nowbf.position
-                    newbfs.append(nowbf)
-                    is_pos_hold = False
-                    continue
+        logger.debug("now_poly_xy_angle")
+        logger.debug(now_poly_xy_angle)
 
-            if ( ( bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ" ) \
-                and (abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= 1 \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= 1 \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= 1)) :
-                # 回転もがほとんどない場合、一時保留する
-                is_rot_hold = True
-            else:
-                if is_rot_hold:
-                    # 回転が動き始めた場合、保持FLG=ONの場合、前回のをコピーする
-                    nowbf.rotation = prev1bf.rotation if is_rot_hold else nowbf.rotation
-                    newbfs.append(nowbf)
-                    is_rot_hold = False
-                    continue
-             
-            # # 移動か回転が動いた場合、前回のを登録する
-            # if is_pos_hold == False or is_rot_hold == False:
-            #     newbfs.append(nowbf)
-            #     continue
+        if len(now_long_x1) <= 1 or ( np.average(now_long_x1) == now_long_x1[0] and np.average(now_long_y1) == now_long_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0
+            now_long_poly_xy_angle = 0
+        else:
+            # 登録対象長めキーフレームの近似直線(XY)
+            now_long_poly_xy_fit1 = np.polyfit(now_long_x1, now_long_y1, 1)
+            # now_long_poly_xy_fit1_y_func = np.poly1d(now_long_poly_xy_fit1)
+            # 近似直線の角度
+            now_long_poly_xy_angle = np.rad2deg(np.arctan(now_long_poly_xy_fit1[0]))
 
-            # ○A-○B-○C　の移動パターン
-            # ○A-○B の移動差分
-            prev_pos_diff = prev2bf.position - prev1bf.position
-            # ○B-○C の移動差分
-            now_pos_diff = prev1bf.position - nowbf.position
+        logger.debug("now_long_poly_xy_angle")
+        logger.debug(now_long_poly_xy_angle)
 
-            # logger.debug("prev2bf.position")
-            # logger.debug(prev2bf.position)
-            # logger.debug("prev1bf.position")
-            # logger.debug(prev1bf.position)
-            # logger.debug("nowbf.position")
-            # logger.debug(nowbf.position)
-            # logger.debug("prev_diff")
-            # logger.debug(prev_pos_diff)
-            # logger.debug("now_pos_diff")
-            # logger.debug(now_pos_diff)
+        # 角度差分
+        diff_prev_xy = abs(np.diff([prev_poly_xy_angle, now_poly_xy_angle]))
+        diff_long_xy = abs(np.diff([now_long_poly_xy_angle, now_poly_xy_angle]))
 
-            # 前回と今回の移動差分の内積(マイナスの場合、鈍角で移動が大きい？)
-            dot_pos_diff = QVector3D.dotProduct(prev_pos_diff, now_pos_diff)
+        if len(prev_x1) <= 1 or ( np.average(prev_x1) == prev_x1[0] and np.average(prev_z1) == prev_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            prev_poly_xz_angle = 0
+        else:
+            # 前のキーフレームの近似直線(XZ)
+            prev_poly_xz_fit1 = np.polyfit(prev_x1, prev_z1, 1)
+            # prev_poly_xz_fit1_y_func = np.poly1d(prev_poly_xz_fit1)
+            # 近似直線の角度
+            prev_poly_xz_angle = np.rad2deg(np.arctan(prev_poly_xz_fit1[0]))
 
-            # logger.debug("dot_pos_diff")
-            # logger.debug(dot_pos_diff)
+        logger.debug("prev_poly_xz_angle")
+        logger.debug(prev_poly_xz_angle)
+    
+        if len(now_x1) <= 1 or ( np.average(now_x1) == now_x1[0] and np.average(now_z1) == now_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_poly_xz_angle = 0
+        else:
+            # 登録対象キーフレームの近似直線(XZ)
+            now_poly_xz_fit1 = np.polyfit(now_x1, now_z1, 1)
+            # now_poly_xz_fit1_y_func = np.poly1d(now_poly_xz_fit1)
+            # 近似直線の角度
+            now_poly_xz_angle = np.rad2deg(np.arctan(now_poly_xz_fit1[0]))
+
+        logger.debug("now_poly_xz_angle")
+        logger.debug(now_poly_xz_angle)
+    
+        if len(now_long_x1) <= 1 or ( np.average(now_long_x1) == now_long_x1[0] and np.average(now_long_z1) == now_long_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_long_poly_xz_angle = 0
+        else:
+            # 登録対象長めキーフレームの近似直線(XZ)
+            now_long_poly_xz_fit1 = np.polyfit(now_long_x1, now_long_z1, 1)
+            # now_long_poly_xz_fit1_y_func = np.poly1d(now_long_poly_xz_fit1)
+            # 近似直線の角度
+            now_long_poly_xz_angle = np.rad2deg(np.arctan(now_long_poly_xz_fit1[0]))
+
+        logger.debug("now_long_poly_xz_angle")
+        logger.debug(now_long_poly_xz_angle)
+
+        # 角度差分
+        diff_prev_xz = abs(np.diff([prev_poly_xz_angle, now_poly_xz_angle]))
+        diff_long_xz = abs(np.diff([now_long_poly_xz_angle, now_poly_xz_angle]))
+    
+        if (( diff_prev_xy > 20 and diff_long_xy > 20) or (diff_prev_xz > 20 and diff_long_xz > 20)) \
+            and (abs(np.diff([fit_center_x_points[-1], base_center_x[n]])) >= mdecimation \
+                or abs(np.diff([fit_center_y_points[-1], base_center_y[n]])) >= mdecimation \
+                or abs(np.diff([fit_center_z_points[-1], base_center_z[n]])) >= mdecimation) :
+            # 前回と今回の角度の差が規定より大きい場合、キーフレーム登録
+            fit_frames.append(n)
+            fit_center_x_points.append(base_center_x[n])
+            fit_center_y_points.append(base_center_y[n])
+            fit_center_z_points.append(base_center_z[n])
+            fit_groove_y_points.append(base_groove_y[n])
+        elif is_groove and is_regist_groove_frame(n, base_groove_y, fit_frames, fit_groove_y_points, mdecimation):
+            # 前回と今回の角度の差が規定より小さく、かつグルーブがある場合、追加判定する
+            fit_frames.append(n)
+            fit_center_x_points.append(base_center_x[n])
+            fit_center_y_points.append(base_center_y[n])
+            fit_center_z_points.append(base_center_z[n])
+            fit_groove_y_points.append(base_groove_y[n])
+        else:
+            # グルーブがない場合はスルー
+            pass                
+
+    logger.debug(len(fit_center_x_points))
+
+    # センター・グルーブを再登録
+    center_newbfs = []
+    groove_newbfs = []
+
+    for n in fit_frames:
+        center_newbfs.append(bone_frame_dic["センター"][n])
+
+        if is_groove:
+            groove_newbfs.append(bone_frame_dic["グルーブ"][n])
+
+    bone_frame_dic["センター"] = center_newbfs
+    bone_frame_dic["グルーブ"] = groove_newbfs
+
+    # if level[verbose] == logging.DEBUG:
+    #     fit_start = 0
+    #     for n in range(0, len(base_x), 50):
+    #         plt.cla()
+    #         plt.clf()
+    #         fig, (axY, axZ) = plt.subplots(ncols=2, figsize=(15, 15))
+    #         axY.plot(np.array(base_x[n:n+50]) , np.array(base_y[n:n+50]), lw=2)
+    #         axZ.plot(np.array(base_x[n:n+50]) , np.array(base_z[n:n+50]), lw=2)
+
+    #         fit_end = 0
+    #         for m in range(fit_start, len(fit_frames)):
+    #             if fit_frames[m] >= n+50:
+    #                 fit_end = m
+    #                 break
+
+    #         axY.plot(np.array(fit_x_points[fit_start:fit_end]) , np.array(fit_y_points[fit_start:fit_end]), c="#CC0000")
+    #         axZ.plot(np.array(fit_x_points[fit_start:fit_end]) , np.array(fit_z_points[fit_start:fit_end]), c="#CC0000")
+
+    #         fit_start = fit_end + 1
+
+    #         plotName = "{0}/plot_{1}_{2:05d}.png".format(base_dir, bone_name, n)
+    #         plt.savefig(plotName)
+    #         plt.close()
+
+# グルーブボーンを登録するか否か判定する
+def is_regist_groove_frame(n, base_y, fit_frames, fit_y_points, mdecimation):
+    # 2つ前のキーフレームのY（1点）
+    if len(fit_y_points) == 1:
+        prev_y2 = fit_y_points[-1]
+    else:
+        prev_y2 = fit_y_points[-2]
+
+    # logger.debug("prev_y2")
+    # logger.debug(prev_y2)
+        
+    # 前のキーフレームのY（1点）
+    prev_y1 = fit_y_points[-1]
+
+    # logger.debug("prev_y1")
+    # logger.debug(prev_y1)
+
+    # 次のキーフレームのY
+    if len(base_y) - 1 == n:
+        next_y1 = base_y[n]
+    else:
+        next_y1 = base_y[n + 1]
+
+    # logger.debug("next_y1")
+    # logger.debug(next_y1)
+    
+    # if n > 2450 and n < 2500:
+    #     logger.debug("base_y[n]: {0}, prev_y1: {1}, base_y[n] - prev_y1: {2}".format(base_y[n], prev_y1, base_y[n] - prev_y1))
+    #     logger.debug("prev_y1: {0}, prev_y2: {1}, prev_y1 - prev_y2: {2}".format(prev_y1, prev_y2, prev_y1 - prev_y2))
+    #     logger.debug("base_y[n]: {0}, prev_y1: {1}, base_y[n] - prev_y1: {2}".format(base_y[n], prev_y1, base_y[n] - prev_y1))
+    #     logger.debug("prev_y1: {0}, prev_y2: {1}, prev_y1 - prev_y2: {2}".format(prev_y1, prev_y2, prev_y1 - prev_y2))
+    #     logger.debug("abs(np.diff([prev_y1, base_y[n]])): {0}".format(abs(np.diff([prev_y1, base_y[n]]))))
+
+    if (base_y[n] - prev_y1 < 0 and prev_y1 - prev_y2 >= 0 and abs(np.diff([prev_y1, base_y[n]])) >= mdecimation ) \
+        or (base_y[n] - prev_y1 > 0 and prev_y1 - prev_y2 <= 0 and abs(np.diff([prev_y1, base_y[n]])) >= mdecimation ) :
+        # 前回の移動と符号が反転している（上下逆に運動している）場合
+        # かつ移動量が規定量以上の場合、登録
+        return True
+    elif (next_y1 - base_y[n] < 0 and base_y[n] - prev_y1 >= 0 and abs(np.diff([next_y1, base_y[n]])) >= mdecimation ) \
+        or (next_y1 - base_y[n] > 0 and base_y[n] - prev_y1 <= 0 and abs(np.diff([next_y1, base_y[n]])) >= mdecimation ) :
+        # 次の移動と符号が反転している（上下逆に運動している）場合
+        # かつ移動量が規定量以上の場合、登録
+        # タメ登録
+        return True
+    else:
+        # 前回と今回の角度の差が規定より小さい場合、スルー
+        return False
+
+# 回転ボーンを揃えて登録する
+def decimate_bone_rotation_frames_array(bone_name_array, ddecimation):
+
+    # フィットさせたフレーム情報
+    fit_frames = []
+
+    # 同じフレーム内で回す
+    for n in range(len(bone_frame_dic[bone_name_array[0]])):
+        logger.debug("decimate_bone_rotation_frames_array n={0} ------------- ".format(n))
+
+        if n == 0:
+            # 最初は必ず登録
+            fit_frames.append(n)
+            continue
             
-            # 前回と今回の移動の回転量(グローブ用。Z軸回りに回転180すると、上下運動が反転する)
-            diff_pos_rotation = QQuaternion.rotationTo(prev_pos_diff, now_pos_diff)
+        for bone_name in bone_name_array:
+            if is_regist_rotation_frame(n, bone_name, fit_frames, ddecimation):
+                # 登録可能な場合、登録
+                fit_frames.append(n)
+                break
+        
+    # 登録する場合、全ボーンの同じフレームで登録する
+    for bone_name in bone_name_array:
+        newbfs = []
+        for n in fit_frames:
+            # logger.debug("n={0}, bone_name={1}, len={2}".format(n, bone_name, len(bone_frame_dic[bone_name])))
+            newbfs.append(bone_frame_dic[bone_name][n])
+        
+        # 新しいフレームリストを登録する
+        bone_frame_dic[bone_name] = newbfs
 
-            # logger.debug("diff_pos_rotation")
-            # logger.debug(diff_pos_rotation.toEulerAngles())
 
-            # # ○A-○B の移動差分
-            # prev_rot_diff = prev2bf.rotation - prev1bf.rotation
-            # # ○B-○C の移動差分
-            # now_rot_diff = prev1bf.rotation - nowbf.rotation
 
-            # logger.debug("prev_rot_diff")
-            # logger.debug(prev_rot_diff)
-            # logger.debug(prev_rot_diff.toEulerAngles())
-            # logger.debug("now_rot_diff")
-            # logger.debug(now_rot_diff)
-            # logger.debug(now_rot_diff.toEulerAngles())
+# 回転系のフレームを登録するか否か判定する
+def is_regist_rotation_frame(n, bone_name, fit_frames, ddecimation):
+    # # 二つ前の回転情報
+    # if len(fit_frames) == 1:
+    #     prev2_rotation = bone_frame_dic[bone_name][fit_frames[-1]].rotation
+    # else:
+    #     prev2_rotation = bone_frame_dic[bone_name][fit_frames[-2]].rotation
 
-            if bone_name == "センター" or bone_name == "グルーブ":
-                if ((abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) > mdecimation) \
-                    or (abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) > mdecimation) \
-                    or (abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) > mdecimation) \
-                    or (dot_pos_diff < 0) \
-                    or (abs(diff_pos_rotation.toEulerAngles().z()) == 180)) :
+    # logger.debug("prev2_rotation x={0}, y={1}, z={2}, scalar={3}".format(prev2_rotation.x(), prev2_rotation.y(), prev2_rotation.z(), prev2_rotation.scalar()))
 
-                    # センター・グルーブの移動量が一定ならば追加
-                    newbfs.append(nowbf)
-                    continue
+    # 一つ前の回転情報
+    prev1_rotation = bone_frame_dic[bone_name][fit_frames[-1]].rotation
+
+    logger.debug("prev1_rotation.euler x={0}, y={1}, z={2}".format(prev1_rotation.toEulerAngles().x(), prev1_rotation.toEulerAngles().y(), prev1_rotation.toEulerAngles().z()))
+
+    # 今回判定対象の回転情報
+    now_rotation = bone_frame_dic[bone_name][n].rotation
+
+    logger.debug("now_rotation.euler x={0}, y={1}, z={2}".format(now_rotation.toEulerAngles().x(), now_rotation.toEulerAngles().y(), now_rotation.toEulerAngles().z()))
+
+    # # 2つ前から前回までの回転の差
+    # diff_prev_rotation = QQuaternion.rotationTo(prev2_rotation.normalized().vector(), prev1_rotation.normalized().vector())
+
+    # logger.debug("diff_prev_rotation x={0}, y={1}, z={2}, scalar={3}".format(diff_prev_rotation.x(), diff_prev_rotation.y(), diff_prev_rotation.z(), diff_prev_rotation.scalar()))
+    # logger.debug("diff_prev_rotation.euler x={0}, y={1}, z={2}".format(diff_prev_rotation.toEulerAngles().x(), diff_prev_rotation.toEulerAngles().y(), diff_prev_rotation.toEulerAngles().z()))
+
+    # diff_prev_ary = [diff_prev_rotation.x(), diff_prev_rotation.y(), diff_prev_rotation.z()]
+    # diff_prev_max_index = np.argmax(diff_prev_ary)
+
+    # logger.debug("diff_prev_max_index={0}".format(diff_prev_max_index))
+
+    # 前回から今回までの回転の差
+    diff_now_rotation = QQuaternion.rotationTo(prev1_rotation.normalized().vector(), now_rotation.normalized().vector())
+
+    logger.debug("diff_now_rotation x={0}, y={1}, z={2}, scalar={3}".format(diff_now_rotation.x(), diff_now_rotation.y(), diff_now_rotation.z(), diff_now_rotation.scalar()))
+    logger.debug("diff_now_rotation.euler x={0}, y={1}, z={2}".format(diff_now_rotation.toEulerAngles().x(), diff_now_rotation.toEulerAngles().y(), diff_now_rotation.toEulerAngles().z()))
+
+    # 一定以上回転していれば登録対象
+    if abs(diff_now_rotation.toEulerAngles().x()) >= ddecimation or abs(diff_now_rotation.toEulerAngles().y()) >= ddecimation or abs(diff_now_rotation.toEulerAngles().z()) >= ddecimation :
+        if bone_name == "上半身" or bone_name == "下半身":
+            # 細かい動きをするボーンは、1F隣でもOKとする
+            return True
+        elif fit_frames[-1] + 1 < n:
+            return True
+    elif diff_now_rotation.toEulerAngles().y() < 0 and ( now_rotation.toEulerAngles().y() <= -90 or now_rotation.toEulerAngles().y() >= 90 ):
+        # 角度が小さくても後ろ向きなら登録対象
+        if bone_name == "上半身" or bone_name == "下半身":
+            return True
+
+    return False
+
+
+# IKボーンを間引きする
+def decimate_bone_ik_frames_array(base_dir, bone_name_array, idecimation, ddecimation):
+
+    base_ik_x = []
+    base_ik_y = []
+    base_ik_z = []
+    for bf in bone_frame_dic[bone_name_array[0]]:
+        base_ik_x.append(bf.position.x())
+        base_ik_y.append(bf.position.y())
+        base_ik_z.append(bf.position.z())
+
+    # フィットさせたフレーム情報
+    fit_frames = []
+    fit_ik_x_points = []
+    fit_ik_y_points = []
+    fit_ik_z_points = []
+    fit_ik_rotation = []
+
+    for n in range(len(base_ik_x)):
+        logger.debug("decimate_bone_ik_frames_array n={0} ------------- ".format(n))
+        
+        # 最初は固定登録
+        if n == 0:
+            fit_frames.append(n)
+            fit_ik_x_points.append(base_ik_x[n])
+            fit_ik_y_points.append(base_ik_y[n])
+            fit_ik_z_points.append(base_ik_z[n])
+            fit_ik_rotation.append(bone_frame_dic[bone_name_array[0]][n].rotation)
+            continue
             
-            if bone_name == "左足ＩＫ" or bone_name == "右足ＩＫ":
-                if ((abs(Decimal(prev1bf.position.x()) - Decimal(nowbf.position.x())) > idecimation) \
-                    or (abs(Decimal(prev1bf.position.y()) - Decimal(nowbf.position.y())) > idecimation) \
-                    or (abs(Decimal(prev1bf.position.z()) - Decimal(nowbf.position.z())) > idecimation)) :
+        # 前のキーフレームのXY（2点）
+        prev_x1 = np.array(fit_ik_x_points[-2:])
+        prev_y1 = np.array(fit_ik_y_points[-2:])
+        prev_z1 = np.array(fit_ik_z_points[-2:])
 
-                    # 移動量が一定量が超えたら、登録
-                    if is_pos_hold:
-                        nowbf.position = prev1bf.position
+        logger.debug("prev_x1")
+        logger.debug(prev_x1)
+        logger.debug("prev_y1")
+        logger.debug(prev_y1)
+        logger.debug("prev_z1")
+        logger.debug(prev_z1)
+        
+        # 登録対象キーフレームのXY
+        now_x1 = np.array(base_ik_x[0+n:3+n])
+        now_y1 = np.array(base_ik_y[0+n:3+n])
+        now_z1 = np.array(base_ik_z[0+n:3+n])
+        
+        # 登録対象キーフレームのXY
+        now_long_x1 = np.array(base_ik_x[0+n:6+n])
+        now_long_y1 = np.array(base_ik_y[0+n:6+n])
+        now_long_z1 = np.array(base_ik_z[0+n:6+n])
+        
+        # 次の登録対象キーフレームのXY
+        next_x1 = np.array(base_ik_x[3+n:6+n])
+        next_y1 = np.array(base_ik_y[3+n:6+n])
+        next_z1 = np.array(base_ik_z[3+n:6+n])
+        
+        # logger.debug("now_x1")
+        # logger.debug(now_x1)
+        # logger.debug("now_y1")
+        # logger.debug(now_y1)
+        # logger.debug("now_z1")
+        # logger.debug(now_z1)
+    
+        if len(prev_x1) <= 1 or ( np.average(prev_x1) == prev_x1[0] and np.average(prev_y1) == prev_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            prev_poly_xy_angle = 0
+        else:
+            # 前のキーフレームの近似直線(XY)
+            prev_poly_xy_fit1 = np.polyfit(prev_x1, prev_y1, 1)
+            # prev_poly_xy_fit1_y_func = np.poly1d(prev_poly_xy_fit1)
+            # 近似直線の角度
+            prev_poly_xy_angle = np.rad2deg(np.arctan(prev_poly_xy_fit1[0]))
 
-                    # IKの移動量が一定ならば追加
-                    newbfs.append(nowbf)
-                    continue
+        logger.debug("prev_poly_xy_angle")
+        logger.debug(prev_poly_xy_angle)
+            
+        if len(now_x1) <= 1 or ( np.average(now_x1) == now_x1[0] and np.average(now_y1) == now_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_poly_xy_angle = 0
+        else:
+            # 登録対象キーフレームの近似直線(XY)
+            now_poly_xy_fit1 = np.polyfit(now_x1, now_y1, 1)
+            # now_poly_xy_fit1_y_func = np.poly1d(now_poly_xy_fit1)
+            # 近似直線の角度
+            now_poly_xy_angle = np.rad2deg(np.arctan(now_poly_xy_fit1[0]))
 
-            if ( ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) > sdecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= ddecimation ) \
-                or \
-                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) > sdecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) <= ddecimation ) \
-                or \
-                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) <= ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) <= ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) > sdecimation ) \
-                or \
-                ( abs(Decimal(prev1bf.rotation.toEulerAngles().x()) - Decimal(nowbf.rotation.toEulerAngles().x())) > ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().y()) - Decimal(nowbf.rotation.toEulerAngles().y())) > ddecimation \
-                and abs(Decimal(prev1bf.rotation.toEulerAngles().z()) - Decimal(nowbf.rotation.toEulerAngles().z())) > ddecimation ) ) :
+        logger.debug("now_poly_xy_angle")
+        logger.debug(now_poly_xy_angle)
 
-                # 同軸回転もしくは異軸回転が規定値を超えていた場合、登録
-                newbfs.append(nowbf)
+        if len(now_long_x1) <= 1 or ( np.average(now_long_x1) == now_long_x1[0] and np.average(now_long_y1) == now_long_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_long_poly_xy_angle = 0
+        else:
+            # 登録対象長めキーフレームの近似直線(XY)
+            now_long_poly_xy_fit1 = np.polyfit(now_long_x1, now_long_y1, 1)
+            # now_long_poly_xy_fit1_y_func = np.poly1d(now_long_poly_xy_fit1)
+            # 近似直線の角度
+            now_long_poly_xy_angle = np.rad2deg(np.arctan(now_long_poly_xy_fit1[0]))
 
-            # if n > 200:
-            #     sys.exit()
+        logger.debug("now_long_poly_xy_angle")
+        logger.debug(now_long_poly_xy_angle)
 
-    # 間引きしたフレームを登録しなおす
-    bone_frame_dic[bone_name] = newbfs
+        if len(next_x1) <= 1 or ( np.average(next_x1) == next_x1[0] and np.average(next_y1) == next_y1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            next_poly_xy_angle = 0
+        else:
+            # 次登録対象キーフレームの近似直線(XY)
+            next_poly_xy_fit1 = np.polyfit(next_x1, next_y1, 1)
+            # next_poly_xy_fit1_y_func = np.poly1d(next_poly_xy_fit1)
+            # 近似直線の角度
+            next_poly_xy_angle = np.rad2deg(np.arctan(next_poly_xy_fit1[0]))
+
+        logger.debug("next_poly_xy_angle")
+        logger.debug(next_poly_xy_angle)
+
+        # 角度差分
+        diff_prev_xy = abs(np.diff([prev_poly_xy_angle, now_poly_xy_angle]))
+        diff_long_xy = abs(np.diff([now_long_poly_xy_angle, now_poly_xy_angle]))
+        diff_next_xy = abs(np.diff([now_poly_xy_angle, next_poly_xy_angle]))
+
+        logger.debug("diff_prev_xy")
+        logger.debug(diff_prev_xy)
+        logger.debug("diff_long_xy")
+        logger.debug(diff_long_xy)
+        logger.debug("diff_next_xy")
+        logger.debug(diff_next_xy)
+    
+        if len(prev_x1) <= 1 or ( np.average(prev_x1) == prev_x1[0] and np.average(prev_z1) == prev_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            prev_poly_xz_angle = 0
+        else:
+            # 前のキーフレームの近似直線(XZ)
+            prev_poly_xz_fit1 = np.polyfit(prev_x1, prev_z1, 1)
+            # prev_poly_xz_fit1_y_func = np.poly1d(prev_poly_xz_fit1)
+            # 近似直線の角度
+            prev_poly_xz_angle = np.rad2deg(np.arctan(prev_poly_xz_fit1[0]))
+
+        logger.debug("prev_poly_xz_angle")
+        logger.debug(prev_poly_xz_angle)
+        
+        if len(now_x1) <= 1 or ( np.average(now_x1) == now_x1[0] and np.average(now_z1) == now_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_poly_xz_angle = 0
+        else:
+            # 登録対象キーフレームの近似直線(XZ)
+            now_poly_xz_fit1 = np.polyfit(now_x1, now_z1, 1)
+            # now_poly_xz_fit1_y_func = np.poly1d(now_poly_xz_fit1)
+            # 近似直線の角度
+            now_poly_xz_angle = np.rad2deg(np.arctan(now_poly_xz_fit1[0]))
+
+        logger.debug("now_poly_xz_angle")
+        logger.debug(now_poly_xz_angle)
+        
+        if len(now_long_x1) <= 1 or ( np.average(now_long_x1) == now_long_x1[0] and np.average(now_long_z1) == now_long_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            now_long_poly_xz_angle = 0
+        else:
+            # 登録対象長めキーフレームの近似直線(XZ)
+            now_long_poly_xz_fit1 = np.polyfit(now_long_x1, now_long_z1, 1)
+            # now_long_poly_xz_fit1_y_func = np.poly1d(now_long_poly_xz_fit1)
+            # 近似直線の角度
+            now_long_poly_xz_angle = np.rad2deg(np.arctan(now_long_poly_xz_fit1[0]))
+
+        logger.debug("now_long_poly_xz_angle")
+        logger.debug(now_long_poly_xz_angle)
+
+        if len(next_x1) <= 1 or ( np.average(next_x1) == next_x1[0] and np.average(next_z1) == next_z1[0] ):
+            # 1つしか値がない場合、もしくは全部同じ値の場合、とりあえず0    
+            next_poly_xz_angle = 0
+        else:
+            # 次登録対象キーフレームの近似直線(XZ)
+            next_poly_xz_fit1 = np.polyfit(next_x1, next_z1, 1)
+            # next_poly_xz_fit1_y_func = np.poly1d(next_poly_xz_fit1)
+            # 近似直線の角度
+            next_poly_xz_angle = np.rad2deg(np.arctan(next_poly_xz_fit1[0]))
+
+        logger.debug("next_poly_xz_angle")
+        logger.debug(next_poly_xz_angle)
+        
+        # 角度差分
+        diff_prev_xz = abs(np.diff([prev_poly_xz_angle, now_poly_xz_angle]))
+        diff_long_xz = abs(np.diff([now_long_poly_xz_angle, now_poly_xz_angle]))
+        diff_next_xz = abs(np.diff([now_poly_xz_angle, next_poly_xz_angle]))
+    
+        logger.debug("diff_prev_xz")
+        logger.debug(diff_prev_xz)
+        logger.debug("diff_long_xz")
+        logger.debug(diff_long_xz)
+        logger.debug("diff_next_xz")
+        logger.debug(diff_next_xz)
+
+        if ( diff_prev_xy > 20 and diff_long_xy > 20) or (diff_prev_xz > 20 and diff_long_xz > 20) :
+            # 前回と今回の角度の差が規定より大きい場合
+            diff_x = abs(np.diff([fit_ik_x_points[-1], base_ik_x[n]]))
+            diff_y = abs(np.diff([fit_ik_y_points[-1], base_ik_y[n]]))
+            diff_z = abs(np.diff([fit_ik_z_points[-1], base_ik_z[n]]))
+
+            logger.debug("diff_x={0}, diff_y={1}. diff_z={2}".format(diff_x, diff_y, diff_z))
+
+            if diff_x >= idecimation or diff_y >= idecimation or diff_z >= idecimation :
+                # IKの動きがある場合、キーフレーム登録
+                fit_frames.append(n)
+                fit_ik_x_points.append(base_ik_x[n])
+                fit_ik_y_points.append(base_ik_y[n])
+                fit_ik_z_points.append(base_ik_z[n])
+                fit_ik_rotation.append(bone_frame_dic[bone_name_array[0]][n].rotation)
+        elif is_regist_rotation_frame(n, bone_name_array[0], fit_frames, ddecimation):
+            # 前回と今回の角度の差が規定より小さく、回転角度が既定以上の場合、追加登録
+            fit_frames.append(n)
+            fit_ik_x_points.append(base_ik_x[n])
+            fit_ik_y_points.append(base_ik_y[n])
+            fit_ik_z_points.append(base_ik_z[n])
+            fit_ik_rotation.append(bone_frame_dic[bone_name_array[0]][n].rotation)
+        elif diff_prev_xy < 1  and diff_prev_xz < 1 and ( diff_next_xy > 20 or diff_next_xz > 20 ):
+            # 前回からほとんど動いていなくて、かつ次に動きがある場合、前回のをコピー
+            fit_frames.append(n)
+            fit_ik_x_points.append(fit_ik_x_points[-1])
+            fit_ik_y_points.append(fit_ik_y_points[-1])
+            fit_ik_z_points.append(fit_ik_z_points[-1])
+            fit_ik_rotation.append(fit_ik_rotation[-1])
+        else:
+            for bone_name in bone_name_array[1:]:
+                if is_regist_rotation_frame(n, bone_name, fit_frames, ddecimation) and fit_frames[-1] + 1 < n:
+                    # 後続の回転ボーンが既定角度以上の場合、追加登録
+                    fit_frames.append(n)
+                    fit_ik_x_points.append(base_ik_x[n])
+                    fit_ik_y_points.append(base_ik_y[n])
+                    fit_ik_z_points.append(base_ik_z[n])
+                    fit_ik_rotation.append(bone_frame_dic[bone_name_array[0]][n].rotation)
+                    break
+        
+        # if n > 10:
+        #     sys.exit()
+
+    logger.debug(len(fit_ik_x_points))
+
+    # IKボーンを再登録
+    ik_newbfs = []
+    for n, frame in enumerate(fit_frames):
+        # logger.debug("copy n={0}, frame={1}".format(n, frame))
+        # 一旦オリジナルをコピー
+        ik_bf = bone_frame_dic[bone_name_array[0]][frame]
+        # logger.debug("ik_bf")
+        # logger.debug(ik_bf.position)
+        # logger.debug(ik_bf.rotation)
+        # logger.debug("fit_ik_x_points = {0}".format(len(fit_ik_x_points)))
+        # logger.debug("fit_ik_y_points = {0}".format(len(fit_ik_y_points)))
+        # logger.debug("fit_ik_z_points = {0}".format(len(fit_ik_z_points)))
+        # logger.debug("fit_ik_rotation = {0}".format(len(fit_ik_rotation)))
+        # 設定値をコピー
+        ik_bf.frame = frame
+        ik_bf.position.setX(fit_ik_x_points[n])
+        ik_bf.position.setY(fit_ik_y_points[n])
+        ik_bf.position.setZ(fit_ik_z_points[n])
+        ik_bf.rotation = fit_ik_rotation[n]
+        ik_newbfs.append(ik_bf)
+
+    # 新しいフレームリストを登録する
+    bone_frame_dic[bone_name_array[0]] = ik_newbfs
+
+    # IK以降の回転ボーンを再登録
+    for bone_name in bone_name_array[1:]:
+        newbfs = []
+        for n in fit_frames:
+            # logger.debug("n={0}, bone_name={1}, len={2}".format(n, bone_name, len(bone_frame_dic[bone_name])))
+            newbfs.append(bone_frame_dic[bone_name][n])
+        
+        # 新しいフレームリストを登録する
+        bone_frame_dic[bone_name] = newbfs
+
+
+    # if level[verbose] == logging.DEBUG:
+    #     fit_start = 0
+    #     for n in range(0, len(base_ik_x), 50):
+    #         plt.cla()
+    #         plt.clf()
+    #         fig, (axY, axZ) = plt.subplots(ncols=2, figsize=(15, 15))
+    #         axY.plot(np.array(base_ik_x[n:n+50]) , np.array(base_ik_y[n:n+50]), lw=2)
+    #         axZ.plot(np.array(base_ik_x[n:n+50]) , np.array(base_ik_z[n:n+50]), lw=2)
+
+    #         fit_end = 0
+    #         for m in range(fit_start, len(fit_frames)):
+    #             if fit_frames[m] >= n+50:
+    #                 fit_end = m
+    #                 break
+
+    #         axY.plot(np.array(fit_ik_x_points[fit_start:fit_end]) , np.array(fit_ik_y_points[fit_start:fit_end]), c="#CC0000")
+    #         axZ.plot(np.array(fit_ik_x_points[fit_start:fit_end]) , np.array(fit_ik_z_points[fit_start:fit_end]), c="#CC0000")
+
+    #         fit_start = fit_end + 1
+
+    #         plotName = "{0}/plot_{1}_{2:05d}.png".format(base_dir, bone_name_array[0], n)
+    #         plt.savefig(plotName)
+    #         plt.close()
 
 
 # IKの計算
@@ -579,31 +1135,45 @@ def calc_IK(bone_csv_file):
             right_ankle_pos.setY( right_ankle_pos.y() - ankle_pos_max )
             bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
 
+            # X回転もさせず、接地させる
+            left_ik_rotation.setX(0)
+            right_ik_rotation.setX(0)
+
         if left_ankle_pos.y() < 0 and right_ankle_pos.y() >= 0:
             # 左足だけの場合マイナス値は0に補正
             left_ankle_pos.setY(0)
+
+            # X回転もさせず、接地させる
+            left_ik_rotation.setX(0)
 
         if right_ankle_pos.y() < 0 and left_ankle_pos.y() >= 0:
             # 右足だけの場合マイナス値は0に補正
             right_ankle_pos.setY(0)
 
+            # X回転もさせず、接地させる
+            right_ik_rotation.setX(0)
+
         bone_frame_dic["左足ＩＫ"][n].position = left_ankle_pos
         bone_frame_dic["左足ＩＫ"][n].rotation = left_ik_rotation
         bone_frame_dic["左足"][n].rotation = left_leg_diff_rotation
-        bone_frame_dic["左ひざ"][n].rotation = QQuaternion()
 
         bone_frame_dic["右足ＩＫ"][n].position = right_ankle_pos
         bone_frame_dic["右足ＩＫ"][n].rotation = right_ik_rotation
         bone_frame_dic["右足"][n].rotation = right_leg_diff_rotation
-        bone_frame_dic["右ひざ"][n].rotation = QQuaternion()
 
-        # if n >= 1015:
+        # if n >= 1000:
         #     sys.exit()
+
+    #　ひざは登録除去
+    bone_frame_dic["左ひざ"] = []
+    bone_frame_dic["右ひざ"] = []
 
 
 
 # 行列でIKの位置を求める
 def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone, toes_bone, ik_bone, center_pos, lower_body_rotation, leg_rotation, knee_rotation):
+
+    # logger.debug("calc_IK_matrix ------------------------")
 
     # IKを求める ----------------------------
 
@@ -665,17 +1235,14 @@ def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone
 
     # 足首の位置(行列の最後は掛けない)
     ankle_pos = matrixs[0] * matrixs[1] * matrixs[2] * matrixs[3] * QVector4D(trans_vs[4], 1)
+    # logger.debug("ankle_pos {0}".format(ankle_pos.toVector3D()))
 
     # logger.debug("ankle_pos")
     # logger.debug(ankle_pos.toVector3D())
 
     # つま先の位置
     toes_pos = matrixs[0] * matrixs[1] * matrixs[2] * matrixs[3] * matrixs[4] * QVector4D(trans_vs[5], 1)
-
-    # logger.debug("toes_pos")
-    # logger.debug(toes_pos.toVector3D())
-
-    # 足首角度補正 ----------------------------------
+    # logger.debug("toes_pos {0}".format(toes_pos.toVector3D()))
 
     # 足付け根から足首までの距離
     ankle_leg_diff = ankle_pos - leg_pos
@@ -719,6 +1286,8 @@ def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone
     ankle_angle = calc_leg_angle(ankle_knee_diff, ankle_leg_diff, knee_leg_diff)
     # logger.debug("ankle_angle: {0}".format(ankle_angle))
 
+    # 足の回転 ------------------------------
+
     # 足の付け根からひざへの方向を表す青い単位ベクトル(長さ1)
     # 足の付け根から足首へのベクトルをX軸回りに回転させる
     knee_v = QQuaternion.fromEulerAngles(leg_angle * -1, 0, 0) * ankle_leg_diff.toVector3D().normalized()
@@ -726,6 +1295,7 @@ def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone
     # logger.debug("knee_v")
     # logger.debug(knee_v)
 
+    # FKのひざの位置
     ik_knee_3d = knee_v * knee_leg_diff.length() + leg_pos.toVector3D()
 
     # logger.debug("ik_knee_3d")
@@ -738,16 +1308,15 @@ def calc_IK_matrix(center_bone, lower_body_bone, leg_bone, knee_bone, ankle_bone
     # logger.debug(leg_diff_rotation)
     # logger.debug(leg_diff_rotation.toEulerAngles())
 
+    # 足IKの回転（足首の角度）-------------------------
+
     # FKと同じ状態の足首の向き
     ik_rotation = lower_body_rotation * leg_rotation * knee_rotation
-
-    # logger.debug("ik_rotation")
-    # logger.debug(ik_rotation)
-    # logger.debug(ik_rotation.toEulerAngles())
+    # logger.debug("ik_rotation {0}".format(ik_rotation.toEulerAngles()))
 
     return (ankle_pos.toVector3D(), ik_rotation, leg_diff_rotation)
 
-    
+
 
 # 三辺から足の角度を求める
 def calc_leg_angle(a, b, c):
@@ -793,7 +1362,15 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
                 # 左足ボーン
                 left_leg_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-    smoothed_2d = [[0 for i in range(3)] for j in range(len(bone_frame_dic["首"]))]
+            if row[1] == "右足首":
+                # 右足首ボーン
+                right_ankle_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足首":
+                # 左足首ボーン
+                left_ankle_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+    smoothed_2d = [[0 for i in range(5)] for j in range(len(bone_frame_dic["首"]))]
     n = 0
     with open(smoothed_file, "r") as sf:
         line = sf.readline() # 1行を文字列として読み込む(改行文字も含まれる)
@@ -810,7 +1387,11 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
             smoothed_2d[n][1] = QVector3D(float(smoothed[16]), float(smoothed[17]), 0)
             # 左足付け根
             smoothed_2d[n][2] = QVector3D(float(smoothed[22]), float(smoothed[23]), 0)
-
+            # 右足首
+            smoothed_2d[n][3] = QVector3D(float(smoothed[20]), float(smoothed[21]), 0)
+            # 左足首
+            smoothed_2d[n][4] = QVector3D(float(smoothed[26]), float(smoothed[27]), 0)
+        
             n += 1
 
             line = sf.readline()
@@ -845,8 +1426,20 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     # 直立フレームの左足と右足の位置の平均
     upright_leg_avg = abs((smoothed_2d[upright_idx][1].y() + smoothed_2d[upright_idx][2].y()) / 2)
 
-    # logger.debug("upright_leg_avg")
-    # logger.debug(upright_leg_avg)
+    # 直立フレームの左足首と右足首の位置の平均
+    upright_ankle_avg = abs((smoothed_2d[upright_idx][3].y() + smoothed_2d[upright_idx][4].y()) / 2)
+
+    # logger.debug("upright_ankle_avg")
+    # logger.debug(upright_ankle_avg)
+
+    # ボーンの足首のY位置
+    bone_anke_y = right_ankle_3d[1]
+
+    # logger.debug("bone_anke_y")
+    # logger.debug(bone_anke_y)
+
+    # 足首位置の比率
+    upright_ankle_scale = (bone_anke_y / upright_ankle_avg) * (center_xy_scale / 100)
 
     # # 上半身から首までの距離
     # neck_upright_distance = upper_body_3d.distanceToPoint(neck_3d)
@@ -872,6 +1465,15 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     for n, smoothed in enumerate(smoothed_2d):
         logger.debug("センター計算 frame={0}".format(n))
 
+        # 左足首と右足首の位置の小さい方(上に上がってるのを下ろすだけなので、絶対値判定)
+        ankle_min = np.min([abs(smoothed_2d[n][1].y()), abs(smoothed_2d[n][2].y())])
+
+        # logger.debug("ankle_min")
+        # logger.debug(ankle_min)
+
+        # logger.debug("ankle_min * upright_ankle_scale")
+        # logger.debug(ankle_min * upright_ankle_scale)
+
         # 左足と右足の位置の平均
         leg_avg = abs((smoothed_2d[n][1].y() + smoothed_2d[n][2].y()) / 2)
         
@@ -879,7 +1481,8 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         leg_diff = upright_leg_avg - leg_avg
 
         # Y軸移動(とりあえずセンター固定)
-        bone_frame_dic["センター"][n].position.setY(leg_diff * upright_xy_scale)
+        bone_frame_dic["センター"][n].position.setY((leg_diff * upright_xy_scale) - (ankle_min * upright_ankle_scale))
+        # bone_frame_dic["センター"][n].position.setY((leg_diff * upright_xy_scale))
         
         # 首・左足・右足の中心部分をX軸移動
         x_avg = ((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3) \
@@ -1172,6 +1775,7 @@ def set_groove(bone_csv_file):
             bone_frame_dic["グルーブ"][n].position = QVector3D(0, bone_frame_dic["センター"][n].position.y(), 0)
             bone_frame_dic["センター"][n].position = QVector3D(bone_frame_dic["センター"][n].position.x(), 0, bone_frame_dic["センター"][n].position.z())
 
+    return is_groove
 
 # 直立姿勢から傾いたところの頂点を求める
 # FIXME クォータニオンで求められないか要調査
@@ -1219,9 +1823,9 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, sdecimation, ddecimation)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment)
     
 if __name__ == '__main__':
     import sys
@@ -1248,39 +1852,44 @@ if __name__ == '__main__':
     parser.add_argument('-x', '--x-angle', dest='xangle', type=int,
                         default=0,
                         help='global x angle correction')
-    parser.add_argument('-s', '--same-born-decimation', dest='sdecimation', type=int,
+    parser.add_argument('-d', '--born-decimation-angle', dest='ddecimation', type=int,
                         default=0,
-                        help='born frame same decimation angle')
-    parser.add_argument('-d', '--difference-born-decimation', dest='ddecimation', type=int,
-                        default=0,
-                        help='born frame difference decimation angle')
+                        help='born frame decimation angle')
     parser.add_argument('-m', '--center-move-born-decimation', dest='mdecimation', type=float,
                         default=0,
                         help='born frame center decimation move')
     parser.add_argument('-i', '--ik-move-born-decimation', dest='idecimation', type=float,
                         default=0,
                         help='born frame ik decimation move')
+    parser.add_argument('-a', '--decimation-alignment', dest='alignment', type=int,
+                        default=1,
+                        help='born frame decimation alignment')
     args = parser.parse_args()
 
     # resultディレクトリだけ指定させる
     base_dir = args.target
 
+    is_alignment = True if args.alignment == 1 else False
+
     # 入力と出力のファイル名は固定
     position_file = base_dir + "/pos.txt"
     smoothed_file = base_dir + "/smoothed.txt"
-    vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}.vmd".format(base_dir, datetime.datetime.now())
-
-    level = {0:logging.ERROR,
-             1:logging.WARNING,
-             2:logging.INFO,
-             3:logging.DEBUG}
+    suffix = ""
+    if args.mdecimation == 0 and args.idecimation == 0 and args.ddecimation == 0:
+        suffix = "_間引きなし"
+    elif is_alignment == False:
+        suffix = "_揃えなし"
+        
+    vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}{2}.vmd".format(base_dir, datetime.datetime.now(), suffix)
 
     # ログレベル設定
     logger.setLevel(level[args.verbose])
 
+    verbose = args.verbose
+
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.sdecimation, args.ddecimation)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))
