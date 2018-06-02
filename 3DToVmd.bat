@@ -54,7 +54,7 @@ set /P CENTER_Z_SCALE="センターZ移動倍率: "
 rem ---  グローバルX軸角度補正
 
 echo --------------
-set GROBAL_X_ANGLE=16
+set GROBAL_X_ANGLE=15
 echo 3D化した際にグローバルX軸に若干傾くのを補正します
 echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_X_ANGLE%度回転します。
@@ -79,25 +79,28 @@ echo 指定された範囲内の移動があった場合に間引きされます。
 echo 何も入力せず、ENTERを押下した場合、「%IK_DECIMATION_MOVE%」の移動量で間引きます。
 set /P IK_DECIMATION_MOVE="IK移動間引き量: "
 
-rem ---  同軸間引き角度
+rem ---  間引き角度
 
 echo --------------
-set SAME_DECIMATION_ANGLE=15
+set DECIMATION_ANGLE=20
 echo 回転キーの間引きに使用する角度を指定します
-echo 同じ軸(X軸方向への回転が続く場合等)に指定された角度以内の回転があった場合に間引きされます。
+echo 指定された角度以内の回転があった場合に間引きされます。
 echo -180～180度の整数のみを入力して下さい。
-echo 何も入力せず、ENTERを押下した場合、%SAME_DECIMATION_ANGLE%度間引きます。
-set /P SAME_DECIMATION_ANGLE="同軸間引き角度: "
+echo 何も入力せず、ENTERを押下した場合、%DECIMATION_ANGLE%度間引きます。
+set /P DECIMATION_ANGLE="間引き角度: "
 
-rem ---  異軸間引き角度
+rem ---  間引きキー揃え
 
 echo --------------
-set DIFF_DECIMATION_ANGLE=3
-echo 回転キーの間引きに使用する角度を指定します
-echo 違うじ軸(X軸方向への回転からZ軸方向に回転した場合等)に指定された角度以内の回転があった場合に間引きされます。
-echo -180～180度の整数のみを入力して下さい。
-echo 何も入力せず、ENTERを押下した場合、%DIFF_DECIMATION_ANGLE%度間引きます。
-set /P DIFF_DECIMATION_ANGLE="異軸間引き角度: "
+echo 間引いたキーを揃えるか、yes か no を入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、yesとみなし、間引いたキーを揃えます。
+set ALIGNMENT=1
+set IS_ALIGNMENT=yes
+set /P IS_ALIGNMENT="詳細ログ[yes/no]: "
+
+IF /I "%IS_ALIGNMENT%" EQU "no" (
+    set ALIGNMENT=0
+)
 
 
 rem ---  詳細ログ有無
@@ -116,5 +119,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -s %SAME_DECIMATION_ANGLE% -d %DIFF_DECIMATION_ANGLE%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT%
 
