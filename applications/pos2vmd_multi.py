@@ -331,7 +331,7 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik):
     writer = VmdWriter()
 
     logger.info("角度計算開始")
@@ -346,8 +346,14 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
 
     logger.info("IK計算開始")
 
-    # IKの計算
-    calc_IK(bone_csv_file)
+    if is_ik:
+        # IKの計算
+        calc_IK(bone_csv_file)
+    else:
+        #　IKでない場合は登録除去
+        bone_frame_dic["左足ＩＫ"] = []
+        bone_frame_dic["右足ＩＫ"] = []
+        
 
     # bf_x = []
     # bf_y = []
@@ -377,8 +383,14 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
             logger.info("揃えて間引き開始")
             # 揃えて間引き
             decimate_bone_center_frames_array(base_dir, is_groove, mdecimation)
-            decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ", "左足"], idecimation, ddecimation)
-            decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ", "右足"], idecimation, ddecimation)
+
+            if is_ik:
+                decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ", "左足"], idecimation, ddecimation)
+                decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ", "右足"], idecimation, ddecimation)
+            else:
+                decimate_bone_ik_frames_array(base_dir, ["左足", "左ひざ"], idecimation, ddecimation)
+                decimate_bone_ik_frames_array(base_dir, ["右足", "右ひざ"], idecimation, ddecimation)
+                
             # decimate_bone_rotation_frames_array(["上半身"], ddecimation)
             # decimate_bone_rotation_frames_array(["下半身"], ddecimation)
             decimate_bone_rotation_frames_array(["上半身", "下半身"], ddecimation)
@@ -388,8 +400,14 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
         else:
             logger.info("通常間引き開始")
             decimate_bone_center_frames_array(base_dir, is_groove, mdecimation)
-            decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ"], idecimation, ddecimation)
-            decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ"], idecimation, ddecimation)
+
+            if is_ik:
+                decimate_bone_ik_frames_array(base_dir, ["左足ＩＫ"], idecimation, ddecimation)
+                decimate_bone_ik_frames_array(base_dir, ["右足ＩＫ"], idecimation, ddecimation)
+            else:
+                decimate_bone_rotation_frames_array(["左ひざ"], ddecimation)
+                decimate_bone_rotation_frames_array(["右ひざ"], ddecimation)
+                
             decimate_bone_rotation_frames_array(["上半身"], ddecimation)
             decimate_bone_rotation_frames_array(["下半身"], ddecimation)
             decimate_bone_rotation_frames_array(["左足"], ddecimation)
@@ -412,7 +430,8 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
             bone_frames.append(bf)
 
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
-    writer.write_vmd_file(vmd_file, bone_frames)
+    showik_frames = make_showik_frames(is_ik)
+    writer.write_vmd_file(vmd_file, bone_frames, showik_frames)
 
 # センターボーンを間引きする
 def decimate_bone_center_frames_array(base_dir, is_groove, mdecimation):
@@ -1823,9 +1842,23 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik)
+    
+def make_showik_frames(is_ik):
+    if is_ik:
+        return None
+
+    frames = []
+    sf = VmdShowIkFrame()
+    sf.show = 1
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x91\xab\x82\x68\x82\x6a', 0)) # '左足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x91\xab\x82\x68\x82\x6a', 0)) # '右足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '左つまＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '右つまＩＫ'
+    frames.append(sf)
+    return frames
     
 if __name__ == '__main__':
     import sys
@@ -1864,12 +1897,17 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--decimation-alignment', dest='alignment', type=int,
                         default=1,
                         help='born frame decimation alignment')
+    parser.add_argument('-k', '--leg-ik', dest='legik', type=int,
+                        default=1,
+                        help='leg ik')
     args = parser.parse_args()
 
     # resultディレクトリだけ指定させる
     base_dir = args.target
 
     is_alignment = True if args.alignment == 1 else False
+
+    is_ik = True if args.legik == 1 else False
 
     # 入力と出力のファイル名は固定
     position_file = base_dir + "/pos.txt"
@@ -1879,6 +1917,9 @@ if __name__ == '__main__':
         suffix = "_間引きなし"
     elif is_alignment == False:
         suffix = "_揃えなし"
+    
+    if is_ik == False:
+        suffix = "_FK{0}".format(suffix)
         
     vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}{2}.vmd".format(base_dir, datetime.datetime.now(), suffix)
 
@@ -1890,6 +1931,6 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))

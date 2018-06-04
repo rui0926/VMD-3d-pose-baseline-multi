@@ -48,7 +48,7 @@ class VmdWriter():
     def __init__(self):
         pass
 
-    def write_vmd_file(self, filename, bone_frames):
+    def write_vmd_file(self, filename, bone_frames, showik_frames):
         """Write VMD data to a file"""
         fout = open(filename, "wb")
         # header
@@ -62,5 +62,12 @@ class VmdWriter():
         fout.write(struct.pack('<L', 0)) # カメラキーフレーム数
         fout.write(struct.pack('<L', 0)) # 照明キーフレーム数
         fout.write(struct.pack('<L', 0)) # セルフ影キーフレーム数
-        fout.write(struct.pack('<L', 0)) # モデル表示・IK on/offキーフレーム数
+
+        if showik_frames == None:
+            fout.write(struct.pack('<L', 0)) # モデル表示・IK on/offキーフレーム数
+        else:
+            fout.write(struct.pack('<L', len(showik_frames))) # モデル表示・IK on/offキーフレーム数
+            for sf in showik_frames:
+                sf.write(fout)
+        
         fout.close()

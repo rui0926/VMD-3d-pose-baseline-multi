@@ -34,6 +34,20 @@ echo 指定されたフレームの人物の位置がMMDのセンターとなります。
 echo 何も入力せず、ENTERを押下した場合、%UPRIGHT_FRAME_IDX%フレーム目を直立として処理します。
 set /P UPRIGHT_FRAME_IDX="直立姿勢フレームINDEX: "
 
+rem ---  FK or IK
+
+echo --------------
+echo 足をIKで出力するか、yes か no を入力して下さい。
+echo no を入力した場合、FKで出力します
+echo 何も入力せず、ENTERを押下した場合、IKで出力します。
+set IK_FLAG=1
+set IS_IK=yes
+set /P IS_IK="足IK出力是非[yes/no]: "
+
+IF /I "%IS_IK%" EQU "no" (
+    set IK_FLAG=0
+)
+
 rem ---  センターXY移動倍率
 echo --------------
 set CENTER_XY_SCALE=30
@@ -49,6 +63,7 @@ echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
 echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_Z_SCALE%」で処理します。
+echo 0を入力した場合、センターZ軸移動を行いません。
 set /P CENTER_Z_SCALE="センターZ移動倍率: "
 
 rem ---  グローバルX軸角度補正
@@ -67,39 +82,48 @@ set CENTER_DECIMATION_MOVE=0.5
 echo センターキーの間引きに使用する移動量を数値(小数可)で指定します
 echo 指定された範囲内の移動があった場合に間引きされます。
 echo 何も入力せず、ENTERを押下した場合、「%CENTER_DECIMATION_MOVE%」の移動量で間引きます。
-echo 以降に続く間引きパラメータをすべて0にした場合、間引き処理は行いません。
+echo センター移動間引き量を0にした場合、間引きを行いません。
 set /P CENTER_DECIMATION_MOVE="センター移動間引き量: "
 
-rem ---  IK移動間引き量
+IF /I "%CENTER_DECIMATION_MOVE%" EQU "0" (
+    rem -- 間引きを行わない
+    set IK_DECIMATION_MOVE=0
+    set DECIMATION_ANGLE=0
+    set IS_ALIGNMENT=yes
+) ELSE (
+    rem -- 間引きする
+    
+    rem ---  IK移動間引き量
 
-echo --------------
-set IK_DECIMATION_MOVE=1.5
-echo IKキーの間引きに使用する移動量を数値(小数可)で指定します
-echo 指定された範囲内の移動があった場合に間引きされます。
-echo 何も入力せず、ENTERを押下した場合、「%IK_DECIMATION_MOVE%」の移動量で間引きます。
-set /P IK_DECIMATION_MOVE="IK移動間引き量: "
+    echo --------------
+    set IK_DECIMATION_MOVE=1.5
+    echo IKキーの間引きに使用する移動量を数値（小数可）で指定します
+    echo 指定された範囲内の移動があった場合に間引きされます。
+    echo 何も入力せず、ENTERを押下した場合、「%IK_DECIMATION_MOVE%」の移動量で間引きます。
+    set /P IK_DECIMATION_MOVE="IK移動間引き量: "
 
-rem ---  間引き角度
+    rem ---  間引き角度
 
-echo --------------
-set DECIMATION_ANGLE=20
-echo 回転キーの間引きに使用する角度を指定します
-echo 指定された角度以内の回転があった場合に間引きされます。
-echo -180～180度の整数のみを入力して下さい。
-echo 何も入力せず、ENTERを押下した場合、%DECIMATION_ANGLE%度間引きます。
-set /P DECIMATION_ANGLE="間引き角度: "
+    echo --------------
+    set DECIMATION_ANGLE=20
+    echo 回転キーの間引きに使用する角度を指定します
+    echo 指定された角度以内の回転があった場合に間引きされます。
+    echo -180～180度の整数のみを入力して下さい。
+    echo 何も入力せず、ENTERを押下した場合、%DECIMATION_ANGLE%度間引きます。
+    set /P DECIMATION_ANGLE="間引き角度: "
 
-rem ---  間引きキー揃え
+    rem ---  間引きキー揃え
 
-echo --------------
-echo 間引いたキーを揃えるか、yes か no を入力して下さい。
-echo 何も入力せず、ENTERを押下した場合、yesとみなし、間引いたキーを揃えます。
-set ALIGNMENT=1
-set IS_ALIGNMENT=yes
-set /P IS_ALIGNMENT="詳細ログ[yes/no]: "
+    echo --------------
+    echo 間引いたキーを揃えるか、yes か no を入力して下さい。
+    echo 何も入力せず、ENTERを押下した場合、yesとみなし、間引いたキーを揃えます。
+    set ALIGNMENT=1
+    set IS_ALIGNMENT=yes
+    set /P IS_ALIGNMENT="間引きキー揃え[yes/no]: "
 
-IF /I "%IS_ALIGNMENT%" EQU "no" (
-    set ALIGNMENT=0
+    IF /I "%IS_ALIGNMENT%" EQU "no" (
+        set ALIGNMENT=0
+    )
 )
 
 
@@ -119,5 +143,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG%
 
