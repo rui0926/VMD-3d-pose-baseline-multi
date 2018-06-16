@@ -331,7 +331,7 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
     writer = VmdWriter()
 
     logger.info("角度計算開始")
@@ -348,7 +348,7 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
 
     if is_ik:
         # IKの計算
-        calc_IK(bone_csv_file)
+        calc_IK(bone_csv_file, heelpos)
     else:
         #　IKでない場合は登録除去
         bone_frame_dic["左足ＩＫ"] = []
@@ -1073,7 +1073,7 @@ def decimate_bone_ik_frames_array(base_dir, bone_name_array, idecimation, ddecim
 
 
 # IKの計算
-def calc_IK(bone_csv_file):
+def calc_IK(bone_csv_file, heelpos):
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
     # ボーンファイルを開く
@@ -1144,6 +1144,12 @@ def calc_IK(bone_csv_file):
             calc_IK_matrix(center_bone, lower_body_bone, right_leg_bone, right_knee_bone, right_ankle_bone, right_toes_bone, right_leg_ik_bone \
                 , bone_frame_dic["センター"][n].position \
                 , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["右足"][n].rotation, bone_frame_dic["右ひざ"][n].rotation )
+
+        if heelpos != 0:
+            # 踵位置補正がかかっている場合、補正を加算する
+            left_ankle_pos.setY(left_ankle_pos.y() + heelpos)
+            right_ankle_pos.setY(right_ankle_pos.y() + heelpos)
+            bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() + heelpos )
 
         # 両足IKがマイナスの場合
         if left_ankle_pos.y() < 0 and right_ankle_pos.y() < 0:
@@ -1842,9 +1848,9 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos)
     
 def make_showik_frames(is_ik):
     if is_ik:
@@ -1900,6 +1906,9 @@ if __name__ == '__main__':
     parser.add_argument('-k', '--leg-ik', dest='legik', type=int,
                         default=1,
                         help='leg ik')
+    parser.add_argument('-e', '--heel position', dest='heelpos', type=float,
+                        default=0,
+                        help='heel position correction')
     args = parser.parse_args()
 
     # resultディレクトリだけ指定させる
@@ -1931,6 +1940,6 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))

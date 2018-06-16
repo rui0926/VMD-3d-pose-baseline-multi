@@ -46,7 +46,22 @@ set /P IS_IK="足IK出力是非[yes/no]: "
 
 IF /I "%IS_IK%" EQU "no" (
     set IK_FLAG=0
+    set HEEL_POSITION=0
+    rem -- FKの場合、踵位置補正は行わない
+    goto CONFIRM_CENTER
 )
+
+rem ---  踵位置補正
+echo --------------
+set HEEL_POSITION=0
+echo 踵のY軸補正値を数値(小数可)で入力して下さい。
+echo マイナス値を入力すると地面に近付き、プラス値を入力すると地面から遠ざかります。
+echo ある程度は自動で補正しますが、補正しきれない場合に、設定して下さい。
+echo 何も入力せず、ENTERを押下した場合、補正を行いません。
+set /P HEEL_POSITION="踵位置補正: "
+
+
+:CONFIRM_CENTER
 
 rem ---  センターXY移動倍率
 echo --------------
@@ -90,44 +105,47 @@ IF /I "%CENTER_DECIMATION_MOVE%" EQU "0" (
     set IK_DECIMATION_MOVE=0
     set DECIMATION_ANGLE=0
     set IS_ALIGNMENT=yes
-) ELSE (
-    rem -- 間引きする
-    
-    rem ---  IK移動間引き量
 
-    echo --------------
-    set IK_DECIMATION_MOVE=1.5
-    echo IKキーの間引きに使用する移動量を数値（小数可）で指定します
-    echo 指定された範囲内の移動があった場合に間引きされます。
-    echo 何も入力せず、ENTERを押下した場合、「%IK_DECIMATION_MOVE%」の移動量で間引きます。
-    set /P IK_DECIMATION_MOVE="IK移動間引き量: "
+    goto CONFRIM_LOG
+)
+rem -- 間引きする
 
-    rem ---  間引き角度
+rem ---  IK移動間引き量
 
-    echo --------------
-    set DECIMATION_ANGLE=20
-    echo 回転キーの間引きに使用する角度を指定します
-    echo 指定された角度以内の回転があった場合に間引きされます。
-    echo -180～180度の整数のみを入力して下さい。
-    echo 何も入力せず、ENTERを押下した場合、%DECIMATION_ANGLE%度間引きます。
-    set /P DECIMATION_ANGLE="間引き角度: "
+echo --------------
+set IK_DECIMATION_MOVE=1.5
+echo IKキーの間引きに使用する移動量を数値（小数可）で指定します
+echo 指定された範囲内の移動があった場合に間引きされます。
+echo 何も入力せず、ENTERを押下した場合、「%IK_DECIMATION_MOVE%」の移動量で間引きます。
+set /P IK_DECIMATION_MOVE="IK移動間引き量: "
 
-    rem ---  間引きキー揃え
+rem ---  間引き角度
 
-    echo --------------
-    echo 間引いたキーを揃えるか、yes か no を入力して下さい。
-    echo 何も入力せず、ENTERを押下した場合、yesとみなし、間引いたキーを揃えます。
-    set ALIGNMENT=1
-    set IS_ALIGNMENT=yes
-    set /P IS_ALIGNMENT="間引きキー揃え[yes/no]: "
+echo --------------
+set DECIMATION_ANGLE=20
+echo 回転キーの間引きに使用する角度を指定します
+echo 指定された角度以内の回転があった場合に間引きされます。
+echo -180～180度の整数のみを入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、%DECIMATION_ANGLE%度間引きます。
+set /P DECIMATION_ANGLE="間引き角度: "
 
-    IF /I "%IS_ALIGNMENT%" EQU "no" (
-        set ALIGNMENT=0
-    )
+rem ---  間引きキー揃え
+
+echo --------------
+echo 間引いたキーを揃えるか、yes か no を入力して下さい。
+echo 何も入力せず、ENTERを押下した場合、yesとみなし、間引いたキーを揃えます。
+set ALIGNMENT=1
+set IS_ALIGNMENT=yes
+set /P IS_ALIGNMENT="間引きキー揃え[yes/no]: "
+
+IF /I "%IS_ALIGNMENT%" EQU "no" (
+    set ALIGNMENT=0
 )
 
 
 rem ---  詳細ログ有無
+
+:CONFRIM_LOG
 
 echo --------------
 echo 詳細なログを出すか、yes か no を入力して下さい。
@@ -143,5 +161,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %HEEL_POSITION%
 
