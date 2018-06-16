@@ -122,7 +122,7 @@ set /P IK_DECIMATION_MOVE="IK移動間引き量: "
 rem ---  間引き角度
 
 echo --------------
-set DECIMATION_ANGLE=20
+set DECIMATION_ANGLE=10
 echo 回転キーの間引きに使用する角度を指定します
 echo 指定された角度以内の回転があった場合に間引きされます。
 echo -180～180度の整数のみを入力して下さい。
