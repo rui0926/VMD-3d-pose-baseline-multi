@@ -331,7 +331,7 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
     writer = VmdWriter()
 
     logger.info("角度計算開始")
@@ -344,6 +344,13 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
     # センターの計算
     calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale)
 
+    if os.path.exists(depth_file):
+        # 深度ファイルがある場合のみ、Z軸計算
+        logger.info("センターZ計算開始")
+
+        # センターZの計算
+        calc_center_z(depth_file, upright_idx, center_z_scale)
+
     logger.info("IK計算開始")
 
     if is_ik:
@@ -353,8 +360,7 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
         #　IKでない場合は登録除去
         bone_frame_dic["左足ＩＫ"] = []
         bone_frame_dic["右足ＩＫ"] = []
-        
-
+    
     # bf_x = []
     # bf_y = []
     # bf_z = []
@@ -1181,7 +1187,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
 
     for n in range(len(bone_frame_dic["左足"])):
         logger.debug("足IK計算 frame={0}".format(n))
-        logger.debug("右足踵={0}, 左足踵={1}".format(smoothed_2d[n][3], smoothed_2d[n][4]))
+        # logger.debug("右足踵={0}, 左足踵={1}".format(smoothed_2d[n][3], smoothed_2d[n][4]))
 
         # logger.debug("前回左x={0}, 今回左x={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x(), abs(np.diff([smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x()]))))
         # logger.debug("前回左y={0}, 今回左y={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y(), abs(np.diff([smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y()]))))
@@ -1189,7 +1195,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
         #左足IK
         if n > 0 and abs(np.diff([smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x()])) < 5 and abs(np.diff([smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y()])) < 5:
             # ほぼ動いていない場合、前回分をコピー
-            logger.debug("前回左IKコピー")
+            # logger.debug("前回左IKコピー")
 
             # 前回からほぼ動いていない場合、前回の値をコピーする
             left_ankle_pos = bone_frame_dic["左足ＩＫ"][prev_left_frame].position
@@ -1211,7 +1217,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
         # 右足IK
         if n > 0 and abs(np.diff([smoothed_2d[prev_right_frame][3].x(), smoothed_2d[n][3].x()])) < 5 and abs(np.diff([smoothed_2d[prev_right_frame][3].y(), smoothed_2d[n][3].y()])) < 5:
             # ほぼ動いていない場合、前回分をコピー
-            logger.debug("前回右IKコピー")
+            # logger.debug("前回右IKコピー")
 
             right_ankle_pos = bone_frame_dic["右足ＩＫ"][prev_right_frame].position
             right_ik_rotation = bone_frame_dic["右足ＩＫ"][prev_right_frame].rotation
@@ -1232,15 +1238,29 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
                 left_ankle_pos.setY(left_ankle_pos.y() + heelpos)
                 right_ankle_pos.setY(right_ankle_pos.y() + heelpos)
                 bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() + heelpos )
+        # elif prev_left_frame != n and prev_right_frame != n:
+        #     # 固定位置が近い方のINDEXを取得する
+        #     prev_idx = prev_left_frame if prev_left_frame <= prev_right_frame else prev_right_frame
+
+        #     # 右足も左足も計算しなかった場合、センターをコピーする
+        #     bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][prev_idx].position.y() )
+
+        # logger.debug("left_ankle_pos:{0}, right_ankle_pos: {1}".format(left_ankle_pos, right_ankle_pos))
 
         # 両足IKがマイナスの場合
         if left_ankle_pos.y() < 0 and right_ankle_pos.y() < 0:
             ankle_pos_max = np.max([left_ankle_pos.y(), right_ankle_pos.y()])
 
+            # logger.debug("ankle_pos_max:{0}".format(ankle_pos_max))    
+
+            # logger.debug("center.y1:{0}".format(bone_frame_dic["センター"][n].position.y()))    
+
             # センターも一緒にあげる
             left_ankle_pos.setY( left_ankle_pos.y() - ankle_pos_max )
             right_ankle_pos.setY( right_ankle_pos.y() - ankle_pos_max )
-            bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
+            # bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
+            
+            # logger.debug("center.y2:{0}".format(bone_frame_dic["センター"][n].position.y()))    
 
             # X回転もさせず、接地させる
             left_ik_rotation.setX(0)
@@ -1268,7 +1288,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
         bone_frame_dic["右足ＩＫ"][n].rotation = right_ik_rotation
         bone_frame_dic["右足"][n].rotation = right_leg_diff_rotation
 
-        # if n >= 35:
+        # if n >= 5:
         #     sys.exit()
 
     #　ひざは登録除去
@@ -1444,8 +1464,77 @@ def calc_leg_angle(a, b, c):
     # logger.debug(angle)
 
     return angle
-    
 
+# センターZの計算 
+def calc_center_z(depth_file, upright_idx, center_z_scale):
+    logger.debug("depth_file: "+ depth_file)
+
+    depth_indexes = []
+    depth_values = []
+    # 深度ファイルからフレームINDEXを取得する
+    with open(depth_file, "r") as bf:
+        # カンマ区切りなので、csvとして読み込む
+        reader = csv.reader(bf)
+
+        for row in reader:
+            logger.debug("row[0] {0}, row[1]: {1}".format(row[0], row[1]))
+            depth_indexes.append(int(row[0]))
+            depth_values.append(float(row[1]))
+
+    # 直立にもっとも近いINDEXを取得する
+    upright_nearest_idx = get_nearest_idx(depth_indexes, upright_idx)
+
+    logger.debug("upright_nearest_idx: {0}".format(upright_nearest_idx))
+
+    # 直立近似INDEXの深度を取得する
+    upright_depth = depth_values[upright_nearest_idx]
+
+    logger.debug("upright_depth: {0}".format(upright_depth))
+
+    for idx, n in enumerate(depth_indexes) :
+        # 深度のINDEX1件ごとにセンターZ計算
+
+        now_depth = depth_values[idx] - upright_depth
+
+        logger.debug("n: {0}, now_depth: {1}, result: {2}".format(n, now_depth, (now_depth * center_z_scale)))
+
+        # センターZ
+        bone_frame_dic["センター"][n].position.setZ(now_depth * center_z_scale)
+
+        if n > 0:
+            # 1F以降の場合、その間のセンターも埋める
+            prev_depth = depth_values[idx - 1] - upright_depth
+            prev_idx = depth_indexes[idx - 1]
+
+            # 前回との間隔
+            interval = n - prev_idx
+
+            # 前回との間隔の差分
+            diff_depth = now_depth - prev_depth
+
+            logger.debug("prev_idx: {0}, prev_depth: {1}, interval: {2}, diff_depth: {3}".format(prev_idx, prev_depth, interval, diff_depth))
+            
+            for midx, m in enumerate(range(prev_idx + 1, n)):
+                interval_depth = prev_depth + ( (diff_depth / interval) * (midx + 1) )
+
+                logger.debug("m: {0}, interval_depth: {1}".format(m, interval_depth))
+
+                bone_frame_dic["センター"][m].position.setZ(interval_depth * center_z_scale)
+                
+def get_nearest_idx(target_list, num):
+    """
+    概要: リストからある値に最も近い値のINDEXを返却する関数
+    @param target_list: データ配列
+    @param num: 対象値
+    @return 対象値に最も近い値のINDEX
+    """
+
+    # logger.debug(target_list)
+    # logger.debug(num)
+
+    # リスト要素と対象値の差分を計算し最小値のインデックスを取得
+    idx = np.abs(np.asarray(target_list) - num).argmin()
+    return idx
 
 # センターの計算
 def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale):
@@ -1604,7 +1693,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(smoothed_upright_area)
 
         # 3Dでの首・左足・右足の投影三角形
-        pos_now_area = calc_triangle_area(positions_multi[n][8], positions_multi[n][1], positions_multi[n][4])
+        # pos_now_area = calc_triangle_area(positions_multi[n][8], positions_multi[n][1], positions_multi[n][4])
 
         # logger.debug("positions_multi[n][8]")
         # logger.debug(positions_multi[n][8])
@@ -1620,7 +1709,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(pos_now_area)
 
         # 3Dでの現在の縮尺
-        pos_scale = pos_now_area / pos_upright_area
+        # pos_scale = pos_now_area / pos_upright_area
 
         # logger.debug("pos_scale")
         # logger.debug(pos_scale)
@@ -1629,7 +1718,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(pos_scale ** 2)
 
         # 2Dでの首・左足・右足の投影三角形
-        smoothed_now_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
+        # smoothed_now_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
 
         # logger.debug("smoothed_2d[n][0]")    
         # logger.debug(smoothed_2d[n][0])
@@ -1645,7 +1734,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(smoothed_now_area)
 
         # 2Dでの現在の縮尺
-        smoothed_scale = smoothed_now_area / smoothed_upright_area
+        # smoothed_scale = smoothed_now_area / smoothed_upright_area
 
         # logger.debug("smoothed_scale")
         # logger.debug(smoothed_scale)
@@ -1654,7 +1743,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(((1 - smoothed_scale) ** 2))
 
         # Z軸移動位置の算出
-        now_z_scale = pos_scale * (1 - smoothed_scale)
+        # now_z_scale = pos_scale * (1 - smoothed_scale)
 
         # logger.debug("now_z_scale")
         # logger.debug(now_z_scale)
@@ -1663,7 +1752,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(now_z_scale * center_z_scale)
 
         # Z軸の移動補正
-        bone_frame_dic["センター"][n].position.setZ(now_z_scale * center_z_scale)
+        # bone_frame_dic["センター"][n].position.setZ(now_z_scale * center_z_scale)
 
 
         # # 上半身の各軸傾き具合
@@ -1937,9 +2026,9 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
+def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos)
     
 def make_showik_frames(is_ik):
     if is_ik:
@@ -2010,6 +2099,7 @@ if __name__ == '__main__':
     # 入力と出力のファイル名は固定
     position_file = base_dir + "/pos.txt"
     smoothed_file = base_dir + "/smoothed.txt"
+    depth_file = base_dir + "/depth.txt"
     suffix = ""
     if args.mdecimation == 0 and args.idecimation == 0 and args.ddecimation == 0:
         suffix = "_間引きなし"
@@ -2029,6 +2119,6 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos)
+    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, depth_file, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos)
 
     logger.info("VMDファイル出力完了: {0}".format(vmd_file))

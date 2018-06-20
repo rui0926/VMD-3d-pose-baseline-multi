@@ -73,7 +73,7 @@ set /P CENTER_XY_SCALE="センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=8
+set CENTER_Z_SCALE=5
 echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
@@ -84,7 +84,7 @@ set /P CENTER_Z_SCALE="センターZ移動倍率: "
 rem ---  グローバルX軸角度補正
 
 echo --------------
-set GROBAL_X_ANGLE=15
+set GROBAL_X_ANGLE=18
 echo 3D化した際にグローバルX軸に若干傾くのを補正します
 echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_X_ANGLE%度回転します。
