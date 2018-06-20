@@ -116,7 +116,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
     neck_orientation = QQuaternion.fromDirection(up, direction)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, -1, 0))
-    rotation = normal_correctqq * neck_orientation * initial_orientation.inverted()
+    rotation = neck_orientation * initial_orientation.inverted()
     bf.rotation = upper_body_orientation.inverted() * rotation
     neck_rotation = bf.rotation
     bone_frame_dic["首"].append(bf)
@@ -128,7 +128,7 @@ def positions_to_frames(pos, frame=0, xangle=0):
     up = QVector3D.crossProduct((pos[9] - pos[8]), (pos[10] - pos[9]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
-    rotation = normal_correctqq * orientation * initial_orientation.inverted()
+    rotation = upper_correctqq * orientation * initial_orientation.inverted()
     bf.rotation = neck_rotation.inverted() * upper_body_rotation.inverted() * rotation
     bone_frame_dic["頭"].append(bf)
     
