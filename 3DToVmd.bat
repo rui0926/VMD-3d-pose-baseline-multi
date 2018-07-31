@@ -84,7 +84,7 @@ set /P CENTER_Z_SCALE="センターZ移動倍率: "
 rem ---  グローバルX軸角度補正
 
 echo --------------
-set GROBAL_X_ANGLE=18
+set GROBAL_X_ANGLE=15
 echo 3D化した際にグローバルX軸に若干傾くのを補正します
 echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_X_ANGLE%度回転します。
@@ -104,7 +104,8 @@ IF /I "%CENTER_DECIMATION_MOVE%" EQU "0" (
     rem -- 間引きを行わない
     set IK_DECIMATION_MOVE=0
     set DECIMATION_ANGLE=0
-    set IS_ALIGNMENT=yes
+    set ALIGNMENT=1
+    
 
     goto CONFRIM_LOG
 )
