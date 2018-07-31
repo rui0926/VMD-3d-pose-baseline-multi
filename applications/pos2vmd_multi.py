@@ -1270,56 +1270,56 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
     # ボーンファイルを開く
-    with open(bone_csv_file, "r") as bf:
+    with open(bone_csv_file, "r", encoding=get_file_encoding(bone_csv_file)) as bf:
         reader = csv.reader(bf)
 
         for row in reader:
 
-            if row[1] == "下半身":
+            if row[1] == "下半身" or row[2].lower() == "lower body":
                 # 下半身ボーン
                 lower_body_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左足":
+            if row[1] == "左足" or row[2].lower() == "leg_l":
                 # 左足ボーン
                 left_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左ひざ":
+            if row[1] == "左ひざ" or row[2].lower() == "knee_l":
                 # 左ひざボーン
                 left_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左足首":
+            if row[1] == "左足首" or row[2].lower() == "ankle_l":
                 # 左足首ボーン
                 left_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左つま先":
+            if row[1] == "左つま先" or row[2].lower() == "l toe":
                 # 左つま先ボーン
                 left_toes_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右足":
+            if row[1] == "右足" or row[2].lower() == "leg_r":
                 # 右足ボーン
                 right_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右ひざ":
+            if row[1] == "右ひざ" or row[2].lower() == "knee_r":
                 # 右ひざボーン
                 right_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右足首":
+            if row[1] == "右足首" or row[2].lower() == "ankle_r":
                 # 右足首ボーン
                 right_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右つま先":
+            if row[1] == "右つま先" or row[2].lower() == "r toe":
                 # 右つま先ボーン
                 right_toes_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[0] == "Bone" and row[1] == "左足ＩＫ":
+            if row[0] == "Bone" and (row[1] == "左足ＩＫ" or row[2].lower() == "leg ik_l"):
                 # 左足ＩＫボーン
                 left_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[0] == "Bone" and row[1] == "右足ＩＫ":
+            if row[0] == "Bone" and (row[1] == "右足ＩＫ" or row[2].lower() == "leg ik_r"):
                 # 右足ＩＫボーン
                 right_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "センター":
+            if row[1] == "センター" or row[2].lower() == "center":
                 # センターボーン
                 center_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
@@ -1686,28 +1686,28 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
     # ボーンファイルを開く
-    with open(bone_csv_file, "r") as bf:
+    with open(bone_csv_file, "r",  encoding=get_file_encoding(bone_csv_file)) as bf:
         reader = csv.reader(bf)
 
         for row in reader:
 
-            if row[1] == "首":
+            if row[1] == "首" or row[2].lower() == "neck":
                 # 首ボーン
                 neck_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右足":
+            if row[1] == "右足" or row[2].lower() == "leg_r":
                 # 右足ボーン
                 right_leg_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左足":
+            if row[1] == "左足" or row[2].lower() == "leg_l":
                 # 左足ボーン
                 left_leg_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "右足首":
+            if row[1] == "右足首" or row[2].lower() == "ankle_r":
                 # 右足首ボーン
                 right_ankle_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-            if row[1] == "左足首":
+            if row[1] == "左足首" or row[2].lower() == "ankle_l":
                 # 左足首ボーン
                 left_ankle_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
@@ -2106,11 +2106,11 @@ def set_groove(bone_csv_file):
     # グルーブボーンがあるか
     is_groove = False
     # ボーンファイルを開く
-    with open(bone_csv_file, "r") as bf:
+    with open(bone_csv_file, "r", encoding=get_file_encoding(bone_csv_file)) as bf:
         reader = csv.reader(bf)
 
         for row in reader:
-            if row[1] == "グルーブ":
+            if row[1] == "グルーブ" or row[2].lower() == "groove":
                 is_groove = True
                 break
 
@@ -2129,11 +2129,11 @@ def set_groove(bone_csv_file):
 def is_upper2_body_bone(bone_csv_file):
 
     # ボーンファイルを開く
-    with open(bone_csv_file, "r") as bf:
+    with open(bone_csv_file, "r", encoding=get_file_encoding(bone_csv_file)) as bf:
         reader = csv.reader(bf)
 
         for row in reader:
-            if row[1] == "上半身2":
+            if row[1] == "上半身2" or row[2].lower() == "upper body2":
                 return True
     
     return False
@@ -2201,7 +2201,32 @@ def make_showik_frames(is_ik):
     sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '右つまＩＫ'
     frames.append(sf)
     return frames
+
+def get_file_encoding(file_path):
+
+    try: 
+        f = open(file_path, "rb")
+        fbytes = f.read()
+        f.close()
+    except:
+        raise Exception("unknown encoding!")
+        
+    codelst = ('utf_8', 'shift-jis')
     
+    for encoding in codelst:
+        try:
+            fstr = fbytes.decode(encoding) # bytes文字列から指定文字コードの文字列に変換
+            fstr = fstr.encode('utf-8') # uft-8文字列に変換
+            # 問題なく変換できたらエンコードを返す
+            logger.debug("%s: encoding: %s", file_path, encoding)
+            return encoding
+        except:
+            pass
+            
+    raise Exception("unknown encoding!")
+    
+
+
 if __name__ == '__main__':
     import sys
     if (len(sys.argv) < 2):
