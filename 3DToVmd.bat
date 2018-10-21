@@ -10,7 +10,7 @@ rem ---  3d-pose-baseline-vmd解析結果JSONディレクトリパス
 echo 3d-pose-baseline-vmdの解析結果ディレクトリの絶対パスを入力して下さい。(3d_{実行日時}_idx00)
 echo この設定は半角英数字のみ設定可能で、必須項目です。
 set TARGET_DIR=
-set /P TARGET_DIR=■3D解析結果ディレクトリパス: 
+set /P TARGET_DIR=■3d-pose-baseline-vmd 解析結果ディレクトリパス: 
 rem echo TARGET_DIR：%TARGET_DIR%
 
 IF /I "%TARGET_DIR%" EQU "" (
@@ -18,21 +18,13 @@ IF /I "%TARGET_DIR%" EQU "" (
     EXIT /B
 )
 
+
 rem ---  ボーン構造CSVファイル
 echo --------------
 set MODEL_BONE_CSV=born\あにまさ式ミクボーン.csv
 echo トレース対象モデルのボーン構造CSVファイルの相対もしくは絶対パスを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、「%MODEL_BONE_CSV%」のファイルを読み込みます。
 set /P MODEL_BONE_CSV="ボーン構造CSVファイル: "
-
-rem ---  直立姿勢フレーム番号
-echo --------------
-set UPRIGHT_FRAME_IDX=1
-echo できるだけ人物が正面向きで直立しているフレームのINDEX(1始まり)を入力して下さい。
-echo 特に首と両足付け根の三角が正面判定の基準となります。
-echo 指定されたフレームの人物の位置がMMDのセンターとなります。
-echo 何も入力せず、ENTERを押下した場合、%UPRIGHT_FRAME_IDX%フレーム目を直立として処理します。
-set /P UPRIGHT_FRAME_IDX="直立姿勢フレームINDEX: "
 
 rem ---  FK or IK
 
@@ -73,7 +65,7 @@ set /P CENTER_XY_SCALE="センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=5
+set CENTER_Z_SCALE=2
 echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
@@ -90,10 +82,20 @@ echo -180～180度の整数のみを入力して下さい。
 echo 何も入力せず、ENTERを押下した場合、%GROBAL_X_ANGLE%度回転します。
 set /P GROBAL_X_ANGLE="グローバルX軸角度補正: "
 
+rem ---  滑らかさ
+
+echo --------------
+set SMOOTH_TIMES=1
+echo モーションの円滑化の度数を指定します
+echo 1以上の整数のみを入力して下さい。
+echo 度数が大きいほど、円滑化されます。（代わりに動作が小さくなります）
+echo 何も入力せず、ENTERを押下した場合、%SMOOTH_TIMES%回円滑化します。
+set /P SMOOTH_TIMES="円滑化度数: "
+
 rem ---  センター移動間引き量
 
 echo --------------
-set CENTER_DECIMATION_MOVE=0.5
+set CENTER_DECIMATION_MOVE=0
 echo センターキーの間引きに使用する移動量を数値(小数可)で指定します
 echo 指定された範囲内の移動があった場合に間引きされます。
 echo 何も入力せず、ENTERを押下した場合、「%CENTER_DECIMATION_MOVE%」の移動量で間引きます。
@@ -162,5 +164,5 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 
 rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t %TARGET_DIR% -b %MODEL_BONE_CSV% -u %UPRIGHT_FRAME_IDX% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %HEEL_POSITION%
+python applications\pos2vmd_multi.py -v %VERBOSE% -t "%TARGET_DIR%" -b %MODEL_BONE_CSV% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %HEEL_POSITION% -s %SMOOTH_TIMES%
 

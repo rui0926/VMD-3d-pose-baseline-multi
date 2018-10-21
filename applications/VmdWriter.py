@@ -53,7 +53,7 @@ class VmdWriter():
         fout = open(filename, "wb")
         # header
         fout.write(b'Vocaloid Motion Data 0002\x00\x00\x00\x00\x00')
-        fout.write(b'Dummy Model Name    ')
+        fout.write(b'Trace Model Name    ')
         # bone frames
         fout.write(struct.pack('<L', len(bone_frames))) # ボーンフレーム数
         for bf in bone_frames:

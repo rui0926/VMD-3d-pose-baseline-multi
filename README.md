@@ -24,6 +24,7 @@ python3系 で以下をインストールして下さい
 ## 実行方法
 
 1. [miu200521358/3d-pose-baseline-vmd](https://github.com/miu200521358/3d-pose-baseline-vmd) で生成された3D関節データ(pos.txt)、2D関節データ(smoothed.txt)を用意する
+1. [miu200521358/3dpose_gan_vmd](https://github.com/miu200521358/3dpose_gan_vmd) で生成された3D関節データ(pos_gan.txt)、2D関節データ(smoothed_gan.txt)を用意する
 1. [miu200521358/FCRN-DepthPrediction-vmd](https://github.com/miu200521358/FCRN-DepthPrediction-vmd) で生成された深度推定データ(depth.txt)を用意する
 1. [3DToVmd.bat](3DToVmd.bat) を実行する
 1. `3D解析結果ディレクトリパス` が聞かれるので、1.の結果ディレクトリパスを指定する
@@ -31,9 +32,6 @@ python3系 で以下をインストールして下さい
     - センター移動の計算に身長を使用する
     - ボーン構造CSVファイルの出力方法は、[born/README.md](born/README.md)参照
     - 未指定の場合、デフォルトで[born/あにまさ式ミクボーン.csv](born/あにまさ式ミクボーン.csv)が読み込まれる
-1. `直立姿勢フレーム番号` が聞かれるので、できるだけ人物が正面向きで直立(首から足まで)しているフレームのINDEX(1始まり)を指定する
-    - 指定されたフレームの人物の位置がMMDのセンター中央位置となる
-    - 未指定の場合、デフォルトで1フレーム目を直立として扱う
 1. `足をIKで出力するか` 聞かれるので、出す場合、`yes` を入力する
     - 未指定 もしくは `yes` の場合、IKで出力する
     - `no` の場合、FKで出力する
@@ -51,6 +49,8 @@ python3系 で以下をインストールして下さい
 1. `グローバルX軸補正角度` が聞かれるので、適当な角度(-180～180度の整数のみ)を指定する
     - 未指定の場合、デフォルトで17度指定
     - モーションにより、微妙に異なる場合があるので、適宜調整
+1. `円滑化度数` が聞かれるので、適当な正の整数を指定する
+    - 未指定の場合、デフォルトで1回指定
 1. `センター移動間引き量` が聞かれるので、センター間引き時の移動量(小数可)を指定する
     - 指定された移動量範囲内のセンターキーフレームを間引く
     - 未指定の場合、デフォルトで「0.5」とする
@@ -98,6 +98,7 @@ LICENCE
 【Openpose】：CMU　…　https://github.com/CMU-Perceptual-Computing-Lab/openpose
 【Openpose起動バッチ】：miu200521358　…　https://github.com/miu200521358/openpose-simple
 【Openpose→3D変換】：una-dinosauria, ArashHosseini, miu200521358　…　https://github.com/miu200521358/3d-pose-baseline-vmd
+【Openpose→3D変換その2】：Dwango Media Village, miu200521358：MIT　…　https://github.com/miu200521358/3dpose_gan_vmd
 【深度推定】：Iro Laina, miu200521358　…　https://github.com/miu200521358/FCRN-DepthPrediction-vmd
 【3D→VMD変換】： errno-mmd, miu200521358 　…　https://github.com/miu200521358/VMD-3d-pose-baseline-multi
 ```

@@ -20,7 +20,11 @@ import numpy as np
 import csv
 from decimal import Decimal
 from matplotlib import pyplot as plt
-
+from collections import Counter
+import math
+import copy
+from operator import itemgetter
+              
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -53,7 +57,7 @@ bone_frame_dic = {
     "右足ＩＫ":[]
 }
 
-def positions_to_frames(pos, frame=0, xangle=0, is_upper2_body=False):
+def positions_to_frames(pos, pos_gan, smoothed_2d, frame=0, xangle=0, is_upper2_body=False):
     logger.debug("角度計算 frame={0}".format(str(frame)))
 
 	# 補正角度のクォータニオン
@@ -62,11 +66,274 @@ def positions_to_frames(pos, frame=0, xangle=0, is_upper2_body=False):
     increase2_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle * 2, 0, 0))
     normal_correctqq = QQuaternion.fromEulerAngles(QVector3D(xangle, 0, 0))
 
+    # 体幹の回転
+    upper_body_rotation1, upper_body_rotation2, upper_correctqq, lower_body_rotation, lower_correctqq, is_gan \
+        = positions_to_frames_trunk(frame, pos, pos_gan, is_upper2_body, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq)
+
+    # 上半身
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8f\xe3\x94\xbc\x90\x67' # '上半身'
+    bf.rotation = upper_body_rotation1
+    bone_frame_dic["上半身"].append(bf)
+
+    # 上半身2(角度がある場合のみ登録)
+    if upper_body_rotation2 != QQuaternion():
+        bf = VmdBoneFrame(frame)
+        bf.name = b'\x8f\xe3\x94\xbc\x90\x67\x32' # '上半身2'
+        bf.rotation = upper_body_rotation2
+        bone_frame_dic["上半身2"].append(bf)
+
+    # 下半身
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\xba\x94\xbc\x90\x67' # '下半身'
+    bf.rotation = lower_body_rotation
+    bone_frame_dic["下半身"].append(bf)
+
+    neck_rotation, head_rotation = \
+        positions_to_frames_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan)
+
+    # 首
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8e\xf1' # '首'
+    bf.rotation = neck_rotation
+    bone_frame_dic["首"].append(bf)
+
+    # 頭
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x93\xaa' # '頭'
+    bf.rotation = head_rotation
+    bone_frame_dic["頭"].append(bf)
+
+    # 左肩の初期値
+    gan_left_shoulder_initial_orientation = QQuaternion.fromDirection(QVector3D(1, 0, 0), QVector3D(0, 1, 0))
+    left_shoulder_initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.8, 0), QVector3D(0.5, -0.5, -1))
+    left_arm_initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
+
+    # 左手系の回転
+    left_shoulder_rotation, left_arm_rotation, left_elbow_rotation = \
+        positions_to_frames_arm_one_side(frame, pos, pos_gan, upper_correctqq, upper_body_rotation1, upper_body_rotation2, gan_left_shoulder_initial_orientation, left_shoulder_initial_orientation, left_arm_initial_orientation, LEFT_POINT, is_gan)
+
+    # 左肩
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
+    bf.rotation = left_shoulder_rotation
+    bone_frame_dic["左肩"].append(bf)
+    
+    # 左腕
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x98\x72' # '左腕'
+    bf.rotation = left_arm_rotation
+    bone_frame_dic["左腕"].append(bf)
+    
+    # 左ひじ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x82\xd0\x82\xb6' # '左ひじ'
+    bf.rotation = left_elbow_rotation
+    bone_frame_dic["左ひじ"].append(bf)
+    
+    # 右肩の初期値
+    gan_right_shoulder_initial_orientation = QQuaternion.fromDirection(QVector3D(-1, 0, 0), QVector3D(0, -1, 0))
+    right_shoulder_initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.8, 0), QVector3D(0.5, 0.5, 1))
+    right_arm_initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
+
+    # 右手系の回転
+    right_shoulder_rotation, right_arm_rotation, right_elbow_rotation = \
+        positions_to_frames_arm_one_side(frame, pos, pos_gan, upper_correctqq, upper_body_rotation1, upper_body_rotation2, gan_right_shoulder_initial_orientation, right_shoulder_initial_orientation, right_arm_initial_orientation, RIGHT_POINT, is_gan)
+    
+    # 右肩
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x8C\xA8' # '右肩'
+    bf.rotation = right_shoulder_rotation
+    bone_frame_dic["右肩"].append(bf)
+    
+    # 右腕
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x98\x72' # '右腕'
+    bf.rotation = right_arm_rotation
+    bone_frame_dic["右腕"].append(bf)
+    
+    # 右ひじ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x82\xd0\x82\xb6' # '右ひじ'
+    bf.rotation = right_elbow_rotation
+    bone_frame_dic["右ひじ"].append(bf)
+
+    # 左足と左ひざの回転
+    left_leg_rotation, left_knee_rotation = \
+        positions_to_frames_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, LEFT_POINT, ["左足", "左ひざ"], is_gan)
+
+    # 左足
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x91\xab' # '左足'
+    bf.rotation = left_leg_rotation
+    bone_frame_dic["左足"].append(bf)
+    
+    # 左ひざ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x82\xd0\x82\xb4' # '左ひざ'
+    bf.rotation = left_knee_rotation
+    bone_frame_dic["左ひざ"].append(bf)
+
+    # 右足と右ひざの回転
+    right_leg_rotation, right_knee_rotation = \
+        positions_to_frames_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, RIGHT_POINT, ["右足", "右ひざ"], is_gan)
+
+    # 右足
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x91\xab' # '右足'
+    bf.rotation = right_leg_rotation
+    bone_frame_dic["右足"].append(bf)
+    
+    # 右ひざ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x82\xd0\x82\xb4' # '右ひざ'
+    bf.rotation = right_knee_rotation
+    bone_frame_dic["右ひざ"].append(bf)
+        
+    # センター(箱だけ作る)
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x83\x5A\x83\x93\x83\x5E\x81\x5B' # 'センター'
+    bone_frame_dic["センター"].append(bf)
+
+    # グルーブ(箱だけ作る)
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x83\x4F\x83\x8B\x81\x5B\x83\x75' # 'グルーブ'
+    bone_frame_dic["グルーブ"].append(bf)
+
+    # 左足ＩＫ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x8d\xb6\x91\xab\x82\x68\x82\x6a' # '左足ＩＫ'
+    bone_frame_dic["左足ＩＫ"].append(bf)
+
+    # 右足ＩＫ
+    bf = VmdBoneFrame(frame)
+    bf.name = b'\x89\x45\x91\xab\x82\x68\x82\x6a' # '右足ＩＫ'
+    bone_frame_dic["右足ＩＫ"].append(bf)
+
+# 右系のpos point
+RIGHT_POINT = {
+    'Hip': 1,
+    'Knee': 2,
+    'Foot': 3,
+    'Thorax': 8,
+    'Shoulder': 14,
+    'Elbow': 15,
+    'Wrist': 16,
+    'AnotherShoulder': 11
+}
+# 左系のpos point
+LEFT_POINT = {
+    'Hip': 4,
+    'Knee': 5,
+    'Foot': 6,
+    'Thorax': 8,
+    'Shoulder': 11,
+    'Elbow': 12,
+    'Wrist': 13,
+    'AnotherShoulder': 14
+}
+
+def positions_to_frames_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan):
+    if is_gan: 
+        # 体幹が3dpose-ganで決定されている場合
+
+        # 首
+        direction = pos[9] - pos[8]
+        up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
+        neck_orientation = QQuaternion.fromDirection(up, direction)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, 1, 0))
+        rotation = neck_orientation * initial_orientation.inverted()
+        neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+
+        # 頭
+        direction = pos[10] - pos[9]
+        up = QVector3D.crossProduct((pos[14] - pos[11]), (pos[10] - pos[9]))
+        orientation = QQuaternion.fromDirection(direction, up)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 0))
+        rotation = upper_correctqq * orientation * initial_orientation.inverted()
+        head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+
+    else:
+        # 体幹が 3d-pose-baseline で決定されている場合
+
+        # 首
+        direction = pos[9] - pos[8]
+        up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
+        neck_orientation = QQuaternion.fromDirection(up, direction)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(0, 0, -1))
+        rotation = neck_orientation * initial_orientation.inverted()
+        neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+
+        # 頭
+        direction = pos[10] - pos[9]
+        up = QVector3D.crossProduct((pos[9] - pos[8]), (pos[10] - pos[9]))
+        orientation = QQuaternion.fromDirection(direction, up)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
+        rotation = upper_correctqq * orientation * initial_orientation.inverted()
+        head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+
+    return neck_rotation, head_rotation
+
+def is_smoothed_prev_frame(frame, bone_rotation_dic, angle):
+    # 最初は問答無用でOK
+    if frame == 0:
+        return True
+
+    for bone_name, bone_rotation in bone_rotation_dic.items():    
+        if len(bone_frame_dic[bone_name]) > frame-1:
+            # 1F前の回転との差分をチェックする
+            prev_euler = bone_frame_dic[bone_name][frame-1].rotation.toEulerAngles()
+            now_euler = bone_rotation.toEulerAngles()
+
+            if abs(prev_euler.x() - now_euler.x()) > angle \
+                or abs(prev_euler.y() - now_euler.y()) > angle \
+                or abs(prev_euler.z() - now_euler.z()) > angle :
+                return False
+    
+    return True
+
+def positions_to_frames_trunk(frame, pos, pos_gan, is_upper2_body, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq):
+
+    if pos_gan is not None:
+        # 3dpose-gan による上半身FK
+        g_upper_body_rotation1, g_upper_body_rotation2, g_upper_correctqq \
+            = positions_to_frames_upper_calc(frame, pos_gan, is_upper2_body, QQuaternion(), QQuaternion(), QQuaternion(), QQuaternion())
+        # 3dpose-gan による下半身FK
+        g_lower_body_rotation, g_lower_correctqq \
+            = positions_to_frames_lower_calc(frame, pos_gan, QQuaternion(), QQuaternion(), QQuaternion(), QQuaternion())
+
+        # 前フレームとの差が45度以内で、オイラー角回転がどれか45度以上の場合、3dpose-gan採用
+        # 体幹はY軸回転は見ない
+        if is_smoothed_prev_frame(frame, { "上半身":g_upper_body_rotation1, "上半身2": g_upper_body_rotation2, "下半身":g_lower_body_rotation }, 45) \
+            and (abs(g_upper_body_rotation1.toEulerAngles().x()) > 45 or abs(g_upper_body_rotation1.toEulerAngles().z()) > 45 \
+                or abs(g_lower_body_rotation.toEulerAngles().x()) > 45 or abs(g_lower_body_rotation.toEulerAngles().z()) > 45 ):
+
+            # # Zを反転させる
+            # g_upper_body_rotation1.setZ( g_upper_body_rotation1.z() * -1 )
+            # g_lower_body_rotation.setZ( g_lower_body_rotation.z() * -1 )
+            
+            logger.debug("gan採用: %s u1=%s u2=%s l=%s", frame, g_upper_body_rotation1, g_upper_body_rotation2, g_lower_body_rotation)
+
+            return g_upper_body_rotation1, g_upper_body_rotation2, g_upper_correctqq, g_lower_body_rotation, g_lower_correctqq, True
+
+    # 3d-pose-baseline による上半身FK
+    upper_body_rotation1, upper_body_rotation2, upper_correctqq \
+        = positions_to_frames_upper_calc(frame, pos, is_upper2_body, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq)
+        
+    # 3d-pose-baseline による下半身FK
+    lower_body_rotation, lower_correctqq \
+        = positions_to_frames_lower_calc(frame, pos, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq)
+
+    return upper_body_rotation1, upper_body_rotation2, upper_correctqq, lower_body_rotation, lower_correctqq, False
+
+
+# 上半身FK（実質計算用）
+def positions_to_frames_upper_calc(frame, pos, is_upper2_body, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq):
+
     if is_upper2_body == True:
         # 上半身2がある場合、分割して登録する
+
         # 上半身
-        bf = VmdBoneFrame(frame)
-        bf.name = b'\x8f\xe3\x94\xbc\x90\x67' # '上半身'
         direction = pos[7] - pos[0]
         up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
         upper_body_orientation = QQuaternion.fromDirection(direction, up)
@@ -85,68 +352,56 @@ def positions_to_frames(pos, frame=0, xangle=0, is_upper2_body=False):
             upper_correctqq = decrease_correctqq
 
         upper_body_rotation1 = upper_body_rotation1 * upper_correctqq
-        bf.rotation = upper_body_rotation1
-        bone_frame_dic["上半身"].append(bf)
-
-        # 回転差分用に保持
-        upper_body_rotation1_inverted = upper_body_rotation1.inverted() 
 
         # 上半身2
-        bf = VmdBoneFrame(frame)
-        bf.name = b'\x8f\xe3\x94\xbc\x90\x67\x32' # '上半身2'
         direction = pos[8] - pos[7]
         up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
         upper_body_orientation = QQuaternion.fromDirection(direction, up)
         initial = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
-        upper_body_rotation = upper_body_orientation * initial.inverted()
+        upper_body_rotation2 = upper_body_orientation * initial.inverted()
 
         # 補正をかけて回転する
-        if upper_body_rotation.toEulerAngles().y() < 30 and upper_body_rotation.toEulerAngles().y() > -30:
+        if upper_body_rotation2.toEulerAngles().y() < 30 and upper_body_rotation2.toEulerAngles().y() > -30:
             # 前向きは増量大補正
             upper_correctqq = increase2_correctqq
-        elif upper_body_rotation.toEulerAngles().y() < -120 or upper_body_rotation.toEulerAngles().y() > 120:
+        elif upper_body_rotation2.toEulerAngles().y() < -120 or upper_body_rotation2.toEulerAngles().y() > 120:
             # 後ろ向きは増量補正
             upper_correctqq = increase_correctqq
         else:
             # 横向きは通常補正
             upper_correctqq = normal_correctqq
 
-        upper_body_rotation = upper_body_rotation1.inverted() * upper_body_rotation * upper_correctqq
-        bf.rotation = upper_body_rotation
-        bone_frame_dic["上半身2"].append(bf)
+        upper_body_rotation2 = upper_body_rotation1.inverted() * upper_body_rotation2 * upper_correctqq
         
     else:
-        # 回転差分用に保持
-        upper_body_rotation1_inverted = QQuaternion()
+        # 上半身2は初期クォータニオン
+        upper_body_rotation2 = QQuaternion()
         
         """convert positions to bone frames"""
         # 上半身
-        bf = VmdBoneFrame(frame)
-        bf.name = b'\x8f\xe3\x94\xbc\x90\x67' # '上半身'
         direction = pos[8] - pos[7]
         up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
         upper_body_orientation = QQuaternion.fromDirection(direction, up)
         initial = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
-        upper_body_rotation = upper_body_orientation * initial.inverted()
+        upper_body_rotation1 = upper_body_orientation * initial.inverted()
 
         # 補正をかけて回転する
-        if upper_body_rotation.toEulerAngles().y() < 30 and upper_body_rotation.toEulerAngles().y() > -30:
+        if upper_body_rotation1.toEulerAngles().y() < 30 and upper_body_rotation1.toEulerAngles().y() > -30:
             # 前向きは増量補正
             upper_correctqq = increase_correctqq
-        elif upper_body_rotation.toEulerAngles().y() < -120 or upper_body_rotation.toEulerAngles().y() > 120:
+        elif upper_body_rotation1.toEulerAngles().y() < -120 or upper_body_rotation1.toEulerAngles().y() > 120:
             # 後ろ向きは通常補正
             upper_correctqq = normal_correctqq
         else:
             # 横向きは減少補正
             upper_correctqq = decrease_correctqq
 
-        upper_body_rotation = upper_body_rotation * upper_correctqq
-        bf.rotation = upper_body_rotation
-        bone_frame_dic["上半身"].append(bf)
-    
-    # 下半身
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\xba\x94\xbc\x90\x67' # '下半身'
+        upper_body_rotation1 = upper_body_rotation1 * upper_correctqq
+           
+    return upper_body_rotation1, upper_body_rotation2, upper_correctqq
+
+# 下半身FK（実質計算用）
+def positions_to_frames_lower_calc(frame, pos, decrease_correctqq, increase_correctqq, increase2_correctqq, normal_correctqq):
     direction = pos[0] - pos[7]
     up = QVector3D.crossProduct(direction, (pos[4] - pos[1]))
     lower_body_orientation = QQuaternion.fromDirection(direction, up)
@@ -165,176 +420,95 @@ def positions_to_frames(pos, frame=0, xangle=0, is_upper2_body=False):
         lower_correctqq = decrease_correctqq
 
     lower_body_rotation = lower_body_rotation * lower_correctqq
-    bf.rotation = lower_body_rotation
-    bone_frame_dic["下半身"].append(bf)
 
-    # 首
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8e\xf1' # '首'
-    direction = pos[9] - pos[8]
-    up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
-    neck_orientation = QQuaternion.fromDirection(up, direction)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(0, 0, -1))
-    rotation = neck_orientation * initial_orientation.inverted()
-    bf.rotation = upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
-    neck_rotation = bf.rotation
-    bone_frame_dic["首"].append(bf)
+    return lower_body_rotation, lower_correctqq
 
-    # 頭
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x93\xaa' # '頭'
-    direction = pos[10] - pos[9]
-    up = QVector3D.crossProduct((pos[9] - pos[8]), (pos[10] - pos[9]))
+# 片手のFK
+def positions_to_frames_arm_one_side(frame, pos, pos_gan, upper_correctqq, upper_body_rotation1, upper_body_rotation2, gan_shoulder_initial_orientation, shoulder_initial_orientation, arm_initial_orientation, points, is_gan):
+
+    if pos_gan is not None and is_gan == True:
+
+        # 手(3dpose-gan採用)
+        return positions_to_frames_shoulder_one_side_calc(frame, pos_gan, QQuaternion(), upper_body_rotation1, upper_body_rotation2, gan_shoulder_initial_orientation, arm_initial_orientation, points)
+
+    # 3d-pose-baseline の手FK
+    return positions_to_frames_shoulder_one_side_calc(frame, pos, upper_correctqq, upper_body_rotation1, upper_body_rotation2, shoulder_initial_orientation, arm_initial_orientation, points)
+
+
+# 片方の手FKの実体
+def positions_to_frames_shoulder_one_side_calc(frame, pos, upper_correctqq, upper_body_rotation1, upper_body_rotation2, shoulder_initial_orientation, arm_initial_orientation, points):
+
+    # 肩
+    direction = pos[points['Shoulder']] - pos[points['Thorax']]
+    up = QVector3D.crossProduct((pos[points['Shoulder']] - pos[points['Thorax']]), (pos[points['AnotherShoulder']] - pos[points['Shoulder']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = neck_rotation.inverted() * upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
-    bone_frame_dic["頭"].append(bf)
+    rotation = upper_correctqq * orientation * shoulder_initial_orientation.inverted()
+    # 肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    shoulder_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation # 後で使うので保存しておく
     
-    # 左肩
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x8C\xA8' # '左肩'
-    direction = pos[11] - pos[8]
-    up = QVector3D.crossProduct((pos[11] - pos[8]), (pos[14] - pos[11]))
+    # 腕
+    direction = pos[points['Elbow']] - pos[points['Shoulder']]
+    up = QVector3D.crossProduct((pos[points['Elbow']] - pos[points['Shoulder']]), (pos[points['Wrist']] - pos[points['Elbow']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(2, -0.8, 0), QVector3D(0.5, -0.5, -1))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    # 左肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * bf.rotation = rotation なので、
-    left_shoulder_rotation = upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation # 後で使うので保存しておく
-    bf.rotation = left_shoulder_rotation
-    bone_frame_dic["左肩"].append(bf)
+    rotation = upper_correctqq * orientation * arm_initial_orientation.inverted()
+    # 腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    arm_rotation = shoulder_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation # 後で使うので保存しておく
     
-    # 左腕
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x98\x72' # '左腕'
-    direction = pos[12] - pos[11]
-    up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
+    # ひじ
+    direction = pos[points['Wrist']] - pos[points['Elbow']]
+    up = QVector3D.crossProduct((pos[points['Elbow']] - pos[points['Shoulder']]), (pos[points['Wrist']] - pos[points['Elbow']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    # 左腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * left_shoulder_rotation * bf.rotation = rotation なので、
-    bf.rotation = left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
-    left_arm_rotation = bf.rotation # 後で使うので保存しておく
-    bone_frame_dic["左腕"].append(bf)
-    
-    # 左ひじ
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x82\xd0\x82\xb6' # '左ひじ'
-    direction = pos[13] - pos[12]
-    up = QVector3D.crossProduct((pos[12] - pos[11]), (pos[13] - pos[12]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(1.73, -1, 0), QVector3D(1, 1.73, 0))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    # 左ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
+    rotation = upper_correctqq * orientation * arm_initial_orientation.inverted()
+    # ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * left_arm_rotation * bf.rotation = rotation なので、
-    bf.rotation = left_arm_rotation.inverted() * left_shoulder_rotation.inverted() * upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
+    elbow_rotation = arm_rotation.inverted() * shoulder_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
     # bf.rotation = (upper_body_rotation * left_arm_rotation).inverted() * rotation # 別の表現
-    bone_frame_dic["左ひじ"].append(bf)
     
-    # 右肩
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x8C\xA8' # '右肩'
-    direction = pos[14] - pos[8]
-    up = QVector3D.crossProduct((pos[14] - pos[8]), (pos[11] - pos[14]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(-2, -0.8, 0), QVector3D(0.5, 0.5, 1))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    # 右肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    # upper_body_rotation * bf.rotation = rotation なので、
-    right_shoulder_rotation = upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation # 後で使うので保存しておく
-    bf.rotation = right_shoulder_rotation
-    bone_frame_dic["右肩"].append(bf)
-    
-    # 右腕
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x98\x72' # '右腕'
-    direction = pos[15] - pos[14]
-    up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
-    right_arm_rotation = bf.rotation
-    bone_frame_dic["右腕"].append(bf)
-    
-    # 右ひじ
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x82\xd0\x82\xb6' # '右ひじ'
-    direction = pos[16] - pos[15]
-    up = QVector3D.crossProduct((pos[15] - pos[14]), (pos[16] - pos[15]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(-1.73, -1, 0), QVector3D(1, -1.73, 0))
-    rotation = upper_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = right_arm_rotation.inverted() * right_shoulder_rotation.inverted() * upper_body_rotation.inverted() * upper_body_rotation1_inverted * rotation
-    bone_frame_dic["右ひじ"].append(bf)
+    return shoulder_rotation, arm_rotation, elbow_rotation
 
-    # 左足
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x91\xab' # '左足'
-    direction = pos[5] - pos[4]
-    up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
+
+# 片方の足のFK
+def positions_to_frames_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, points, bone_names, is_gan):
+
+    if pos_gan is not None:
+        # 足(3dpose-gan採用)
+        leg_rotation, knee_rotation = \
+            positions_to_frames_leg_one_side_calc(frame, pos_gan, QQuaternion(), lower_body_rotation, points)
+
+        # 体幹がgan採用もしくはオイラー角回転がどれか45度以上の場合、3dpose-gan採用
+        if is_gan \
+                or (abs(leg_rotation.toEulerAngles().x()) > 45 or abs(leg_rotation.toEulerAngles().y()) > 45 or abs(leg_rotation.toEulerAngles().z()) > 45 \
+                or abs(knee_rotation.toEulerAngles().x()) > 45 or abs(knee_rotation.toEulerAngles().y()) > 45 or abs(knee_rotation.toEulerAngles().z()) > 45 ):
+            return leg_rotation, knee_rotation
+    
+    # 3d-pose-baseline のFK
+    leg_rotation, knee_rotation = \
+        positions_to_frames_leg_one_side_calc(frame, pos, lower_correctqq, lower_body_rotation, points)
+
+    # 足の角度が大人しい場合、3d-pose-baseline を採用
+    return leg_rotation, knee_rotation
+
+# 片方の足の実体
+def positions_to_frames_leg_one_side_calc(frame, pos, lower_correctqq, lower_body_rotation, points):
+    # 足
+    direction = pos[points['Knee']] - pos[points['Hip']]
+    up = QVector3D.crossProduct((pos[points['Knee']] - pos[points['Hip']]), (pos[points['Foot']] - pos[points['Knee']]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
     rotation = lower_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = lower_body_rotation.inverted() * rotation
-    left_leg_rotation = bf.rotation
-    bone_frame_dic["左足"].append(bf)
+    leg_rotation = lower_body_rotation.inverted() * rotation
     
-    # 左ひざ
+    # ひざ
     bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x82\xd0\x82\xb4' # '左ひざ'
-    direction = pos[6] - pos[5]
-    up = QVector3D.crossProduct((pos[5] - pos[4]), (pos[6] - pos[5]))
+    bf.name = b'\x8d\xb6\x82\xd0\x82\xb4' # 'ひざ'
+    direction = pos[points['Foot']] - pos[points['Knee']]
+    up = QVector3D.crossProduct((pos[points['Knee']] - pos[points['Hip']]), (pos[points['Foot']] - pos[points['Knee']]))
     orientation = QQuaternion.fromDirection(direction, up)
     initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
     rotation = lower_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = left_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
-    bone_frame_dic["左ひざ"].append(bf)
+    knee_rotation = leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
 
-    # 右足
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x91\xab' # '右足'
-    direction = pos[2] - pos[1]
-    up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = lower_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = lower_body_rotation.inverted() * rotation
-    right_leg_rotation = bf.rotation
-    bone_frame_dic["右足"].append(bf)
-    
-    # 右ひざ
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x82\xd0\x82\xb4' # '右ひざ'
-    direction = pos[3] - pos[2]
-    up = QVector3D.crossProduct((pos[2] - pos[1]), (pos[3] - pos[2]))
-    orientation = QQuaternion.fromDirection(direction, up)
-    initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(-1, 0, 0))
-    rotation = lower_correctqq * orientation * initial_orientation.inverted()
-    bf.rotation = right_leg_rotation.inverted() * lower_body_rotation.inverted() * rotation
-    bone_frame_dic["右ひざ"].append(bf)
-    
-    # センター(箱だけ作る)
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x83\x5A\x83\x93\x83\x5E\x81\x5B' # 'センター'
-    bone_frame_dic["センター"].append(bf)
-    
-    # グルーブ(箱だけ作る)
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x83\x4F\x83\x8B\x81\x5B\x83\x75' # 'グルーブ'
-    bone_frame_dic["グルーブ"].append(bf)
-
-    # 左足ＩＫ
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x8d\xb6\x91\xab\x82\x68\x82\x6a' # '左足ＩＫ'
-    bone_frame_dic["左足ＩＫ"].append(bf)
-
-    # 右足ＩＫ
-    bf = VmdBoneFrame(frame)
-    bf.name = b'\x89\x45\x91\xab\x82\x68\x82\x6a' # '右足ＩＫ'
-    bone_frame_dic["右足ＩＫ"].append(bf)
+    return leg_rotation, knee_rotation
 
 
 def read_positions(position_file):
@@ -390,39 +564,65 @@ def convert_position(pose_3d):
     return positions
     
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
+def position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times):
     writer = VmdWriter()
+
+    # 関節二次元情報を読み込み
+    smoothed_2d = load_smoothed_2d(smoothed_file)
 
     # 上半身2があるかチェック
     is_upper2_body = is_upper2_body_bone(bone_csv_file)
 
     logger.info("角度計算開始")
 
+    # 各関節角度の算出
     for frame, positions in enumerate(positions_multi):
-        positions_to_frames(positions, frame, xangle, is_upper2_body)    
+        positions_gan = None
+        if positions_gan_multi is not None:
+            positions_gan = positions_gan_multi[frame]
+
+        positions_to_frames(positions, positions_gan, smoothed_2d, frame, xangle, is_upper2_body)    
+
+    logger.info("直立フレーム推定開始")
+
+    # 体幹的に最も直立しているINDEX抽出
+    upright_idxs = calc_upright_body()
+
+    logger.info(upright_idxs)
 
     logger.info("センター計算開始")
-
+    
     # センターの計算
-    calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale)
+    calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos)
 
-    if os.path.exists(depth_file):
+    depths = load_depth(depth_file)
+
+    depth_all_frames = None
+    if depths is not None:
         # 深度ファイルがある場合のみ、Z軸計算
         logger.info("センターZ計算開始")
 
         # センターZの計算
-        calc_center_z(depth_file, upright_idx, center_z_scale)
+        depth_all_frames = calc_center_z(smoothed_2d, depths, upright_idxs, center_xy_scale, center_z_scale)
+
+    logger.info("センター・関節円滑化開始")
+
+    # 角度をなめらかに
+    smooth_motion(smooth_times)
 
     logger.info("IK計算開始")
 
     if is_ik:
         # IKの計算
-        calc_IK(bone_csv_file, smoothed_file, heelpos)
+        calc_IK(bone_csv_file, smoothed_2d, depth_all_frames, upright_idxs, heelpos)
     else:
         #　IKでない場合は登録除去
         bone_frame_dic["左足ＩＫ"] = []
         bone_frame_dic["右足ＩＫ"] = []
     
+    # IKをなめらかに
+    # smooth_IK(smooth_times)
+
     # bf_x = []
     # bf_y = []
     # bf_z = []
@@ -498,15 +698,211 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
 
     logger.info("VMD出力開始")
 
+    # logger.info("upper result: f={0}, x={1}, y={2}, z={3}".format(701, bone_frame_dic["上半身"][701].rotation.toEulerAngles().x(), bone_frame_dic["上半身"][701].rotation.toEulerAngles().y(), bone_frame_dic["上半身"][701].rotation.toEulerAngles().z()))
+
     # ディクショナリ型の疑似二次元配列から、一次元配列に変換
     bone_frames = []
     for k,v in bone_frame_dic.items():
         for bf in v:
             bone_frames.append(bf)
 
+    # vmd出力ファイルにフレーム番号再設定
+    vmd_file = vmd_file.replace("[uDDDD]", "u{0:05d}".format(upright_idxs[0]))
+
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     showik_frames = make_showik_frames(is_ik)
     writer.write_vmd_file(vmd_file, bone_frames, showik_frames)
+
+    logger.info("VMDファイル出力完了: {0}".format(vmd_file))
+
+# 全身で最も直立している姿勢をいくつか返す
+def calc_upright_body():
+    return calc_upright_bones( ["上半身", "上半身2", "下半身", "左足", "左ひざ", "右足", "右ひざ"])
+
+# 最も直立している姿勢をいくつか返す
+def calc_upright_bones(target_bones):
+
+    # ソート用に新しく辞書を生成する
+    upright_bones_dic = {}
+
+    keys =[]
+    values =[]
+    for n in range(len(bone_frame_dic[target_bones[0]])):
+        keys.append(bone_frame_dic[target_bones[0]][n].frame)
+        angles = []
+        for bone_name in target_bones:
+            if len(bone_frame_dic[bone_name]) > n:
+                eular = bone_frame_dic[bone_name][n].rotation.toEulerAngles()
+                angles.append(abs(eular.x()))
+                angles.append(abs(eular.y()))
+                angles.append(abs(eular.z()))
+        values.append( np.nanmax(angles) )
+
+    # logger.info(keys)
+    # logger.info(values)
+    
+    upright_bones_dic = dict(zip(keys, values))
+
+    # オイラー角の絶対最大値昇順でソートする。NaNは無視する
+    sorted_upright_bones_dic = sorted(upright_bones_dic.items(), key=lambda x: x[1])
+
+    logger.debug("ソート後")
+    logger.debug(sorted_upright_bones_dic[:100])
+
+    upright_idxs = []
+    for k, v in sorted_upright_bones_dic[:100]:
+        if is_almost_same_idx(upright_idxs, k, 30):
+            continue
+        
+        upright_idxs.append(k)
+
+        if len(upright_idxs) >= 10:
+            break
+            
+
+    # # 直立に近い順のボーンリスト
+    # upright_bones = [[0 for i in range(len(target_bones))] for j in range(100)]
+    # for n, bone_name in enumerate(target_bones):
+    #     # 直立昇順のインデックスリストを生成する
+    #     for m, bone in enumerate(calc_upright_bone(bone_name)):
+    #         # 配列は持ち方逆転
+    #         # 0: 直立に近い順のインデックス
+    #         # 1: ボーンインデックス
+    #         upright_bones[m][n] = bone.frame
+
+    # for n, bones_parts in enumerate(upright_bones[:3]):
+    #     for m, b in enumerate(bones_parts[:5]):
+    #         logger.debug("ソート前: {0} {1}: {2}".format(n, m, b))
+
+    # upright_bones_flat = np.array(upright_bones_dic).flatten()
+
+    # # 直立っぽいのを検出する
+    # most_common_idxs = Counter(sorted_upright_bones_dic.values()).most_common()
+    # logger.info(most_common_idxs)
+
+    # upright_idxs = []
+    # for most_common_idx in most_common_idxs:
+    #     # 0フレーム目は除外
+    #     if most_common_idx[0] != 0 and is_almost_same_idx(upright_idxs, most_common_idx[0], 30) == False:
+    #         upright_idxs.append(most_common_idx[0])
+
+    #     if len(upright_idxs) >= 10:
+    #         break
+
+    return upright_idxs
+
+def calc_upright_key(bones):
+
+    # 指定フレームの全指定ボーンの回転角度
+    bone_rotations = []
+    for k, v in bones.values():
+        bone_rotations.append(v)
+    
+    return np.nanmax(np.array(bone_rotations))
+
+
+# ほぼ同じようなインデックスの場合TRUE
+def is_almost_same_idx(idxs, n, app):
+    for i in idxs:
+        if abs(i - n) < app:
+            return True
+
+    return False
+
+def calc_upright_bone(bone_name):
+
+    # ソート用に新しく配列を生成する
+    upright_bones = []
+    for bone in bone_frame_dic[bone_name]:
+        upright_bones.append(copy.deepcopy(bone))
+
+    logger.debug("ソート前: %s", bone_name)
+    for n, b in enumerate(upright_bones[:10]):
+        logger.debug("{0}: {1}, {2}, {3}".format(b.frame, b.rotation.x(), b.rotation.y(), b.rotation.z()))
+
+    # オイラー角の絶対値合計値昇順でソートする。NaNは無視する
+    upright_bones.sort(key=lambda x: np.nanmax(np.array([abs(x.rotation.toEulerAngles().x()), abs(x.rotation.toEulerAngles().y()), abs(x.rotation.toEulerAngles().z())]))) 
+
+    logger.info("ソート後: %s", bone_name)
+    for n, b in enumerate(upright_bones[:10]):
+        logger.info("{0}: {1}, {2}, {3}".format(b.frame, b.rotation.toEulerAngles().x(), b.rotation.toEulerAngles().y(), b.rotation.toEulerAngles().z()))
+
+    # # 1/300までのインデックスのみターゲットにする
+    # upright_idxs = []
+    # for n in range(round(len(bone_frame_dic[bone_name])/300)):
+    #     upright_idxs.append(upright_bones[n])
+
+    return upright_bones[:100]
+
+# センター・関節を滑らかにする
+def smooth_motion(smooth_times):
+    # 関節の角度円滑化
+    smooth_angle(smooth_times, ["上半身", "上半身2", "下半身", "首", "頭", "左肩", "左腕", "左ひじ", "右肩",  "右腕", "右ひじ", "左足", "左ひざ", "右足", "右ひざ"])
+
+    # 移動の位置円滑化
+    # smooth_move(smooth_times, ["センター"])
+
+# IKを滑らかにする
+def smooth_IK(smooth_times):
+    target_bones = ["左足ＩＫ", "右足ＩＫ"]
+
+    # 関節の角度円滑化
+    smooth_angle(smooth_times, target_bones)
+
+    # 移動の位置円滑化
+    smooth_move(smooth_times, target_bones)
+
+
+# 回転を滑らかにする
+def smooth_angle(smooth_times, target_bones):
+
+    # 関節の角度円滑化
+    for bone_name in target_bones:
+        for n in range(smooth_times):
+            for frame in range(len(bone_frame_dic[bone_name])):
+                if frame >= 2:
+                    prev2_bf = bone_frame_dic[bone_name][frame - 2]
+                    prev1_bf = bone_frame_dic[bone_name][frame - 1]
+                    now_bf = bone_frame_dic[bone_name][frame]
+
+                    if prev2_bf.rotation != prev1_bf.rotation or prev1_bf.rotation != now_bf.rotation:
+                        # 3F分の角度がどこか違っていたら、球形補正開始
+                        prev1_bf.rotation = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5)
+
+
+def smooth_move(smooth_times, target_bones):
+    # 移動の位置円滑化
+    for bone_name in target_bones:
+        for n in range(smooth_times):
+            for frame in range(len(bone_frame_dic[bone_name])):
+                if frame >= 4:
+                    prev4_bf = bone_frame_dic[bone_name][frame - 4]
+                    prev3_bf = bone_frame_dic[bone_name][frame - 3]
+                    prev2_bf = bone_frame_dic[bone_name][frame - 2]
+                    prev1_bf = bone_frame_dic[bone_name][frame - 1]
+                    now_bf = bone_frame_dic[bone_name][frame]
+
+                    # 線形補正
+                    qq_prev4_bf = QQuaternion(0, prev4_bf.position)
+                    qq_now_bf = QQuaternion(0, now_bf.position)
+                    prev1_bf.position = QQuaternion.slerp(qq_prev4_bf, qq_now_bf, 0.25).vector()
+                    prev2_bf.position = QQuaternion.slerp(qq_prev4_bf, qq_now_bf, 0.5).vector()
+                    prev3_bf.position = QQuaternion.slerp(qq_prev4_bf, qq_now_bf, 0.75).vector()
+
+    # for n in range(smooth_times):
+    #     if frame >= 4:
+    #         prev4_bf = bone_frame_dic["センター"][frame - 4]
+    #         prev3_bf = bone_frame_dic["センター"][frame - 3]
+    #         prev2_bf = bone_frame_dic["センター"][frame - 2]
+    #         prev1_bf = bone_frame_dic["センター"][frame - 1]
+    #         now_bf = bone_frame_dic["センター"][frame]
+
+    #         # 線形補正
+    #         qq_prev4_bf = QQuaternion(0, prev4_bf.position)
+    #         qq_now_bf = QQuaternion(0, now_bf.position)
+    #         prev1_bf.position = QQuaternion.nlerp(qq_prev4_bf, qq_now_bf, 0.25).vector()
+    #         prev2_bf.position = QQuaternion.nlerp(qq_prev4_bf, qq_now_bf, 0.5).vector()
+    #         prev3_bf.position = QQuaternion.nlerp(qq_prev4_bf, qq_now_bf, 0.75).vector()
 
 # センターボーンを間引きする
 def decimate_bone_center_frames_array(base_dir, is_groove, mdecimation):
@@ -1266,8 +1662,10 @@ def decimate_bone_ik_frames_array(base_dir, bone_name_array, idecimation, ddecim
 
 
 # IKの計算
-def calc_IK(bone_csv_file, smoothed_file, heelpos):
+def calc_IK(bone_csv_file, smoothed_2d, depth_all_frames, upright_idxs, heelpos):
     logger.debug("bone_csv_file: "+ bone_csv_file)
+
+    upright_idx = upright_idxs[0]
 
     # ボーンファイルを開く
     with open(bone_csv_file, "r", encoding=get_file_encoding(bone_csv_file)) as bf:
@@ -1323,8 +1721,8 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
                 # センターボーン
                 center_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-    # 関節二次元データを取得
-    smoothed_2d = load_smoothed_2d(smoothed_file)
+    # 2Dの直立フレームの腰の位置
+    center_upright_2d_y = (smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]].y() + smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]].y()) / 2
 
     # 前回フレーム
     prev_left_frame = 0
@@ -1332,13 +1730,13 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
 
     for n in range(len(bone_frame_dic["左足"])):
         logger.debug("足IK計算 frame={0}".format(n))
-        # logger.debug("右足踵={0}, 左足踵={1}".format(smoothed_2d[n][3], smoothed_2d[n][4]))
+        # logger.debug("右足踵={0}, 左足踵={1}".format(smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]], smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]]))
 
-        # logger.debug("前回左x={0}, 今回左x={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x(), abs(np.diff([smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x()]))))
-        # logger.debug("前回左y={0}, 今回左y={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y(), abs(np.diff([smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y()]))))
+        # logger.debug("前回左x={0}, 今回左x={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].x(), abs(np.diff([smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].x()]))))
+        # logger.debug("前回左y={0}, 今回左y={1}, 差分={2}".format(smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].y(), abs(np.diff([smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].y()]))))
 
         #左足IK
-        if n > 0 and abs(np.diff([smoothed_2d[prev_left_frame][4].x(), smoothed_2d[n][4].x()])) < 5 and abs(np.diff([smoothed_2d[prev_left_frame][4].y(), smoothed_2d[n][4].y()])) < 5:
+        if n > 0 and abs(np.diff([smoothed_2d[prev_left_frame][SMOOTHED_2D_INDEX["LAnkle"]].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].x()])) < 5 and abs(np.diff([smoothed_2d[prev_left_frame][SMOOTHED_2D_INDEX["LAnkle"]].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].y()])) < 5:
             # ほぼ動いていない場合、前回分をコピー
             # logger.debug("前回左IKコピー")
 
@@ -1353,14 +1751,15 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
                 calc_IK_matrix(center_bone, lower_body_bone, left_leg_bone, left_knee_bone, left_ankle_bone, left_toes_bone, left_leg_ik_bone \
                     , bone_frame_dic["センター"][n].position \
                     , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["左足"][n].rotation, bone_frame_dic["左ひざ"][n].rotation )
+
             # 前回登録フレームとして保持
             prev_left_frame = n
 
-        # logger.debug("前回右x={0}, 今回右x={1}, 差分={2}".format(smoothed_2d[prev_left_frame][3].x(), smoothed_2d[n][3].x(), abs(np.diff([smoothed_2d[prev_left_frame][3].x(), smoothed_2d[n][3].x()]))))
-        # logger.debug("前回右y={0}, 今回右y={1}, 差分={2}".format(smoothed_2d[prev_left_frame][3].y(), smoothed_2d[n][3].y(), abs(np.diff([smoothed_2d[prev_left_frame][3].y(), smoothed_2d[n][3].y()]))))
+        # logger.debug("前回右x={0}, 今回右x={1}, 差分={2}".format(smoothed_2d[prev_left_frame][3].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].x(), abs(np.diff([smoothed_2d[prev_left_frame][3].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].x()]))))
+        # logger.debug("前回右y={0}, 今回右y={1}, 差分={2}".format(smoothed_2d[prev_left_frame][3].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].y(), abs(np.diff([smoothed_2d[prev_left_frame][3].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].y()]))))
             
         # 右足IK
-        if n > 0 and abs(np.diff([smoothed_2d[prev_right_frame][3].x(), smoothed_2d[n][3].x()])) < 5 and abs(np.diff([smoothed_2d[prev_right_frame][3].y(), smoothed_2d[n][3].y()])) < 5:
+        if n > 0 and abs(np.diff([smoothed_2d[prev_right_frame][SMOOTHED_2D_INDEX["RAnkle"]].x(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].x()])) < 5 and abs(np.diff([smoothed_2d[prev_right_frame][SMOOTHED_2D_INDEX["RAnkle"]].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].y()])) < 5:
             # ほぼ動いていない場合、前回分をコピー
             # logger.debug("前回右IKコピー")
 
@@ -1373,16 +1772,18 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
                 calc_IK_matrix(center_bone, lower_body_bone, right_leg_bone, right_knee_bone, right_ankle_bone, right_toes_bone, right_leg_ik_bone \
                     , bone_frame_dic["センター"][n].position \
                     , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["右足"][n].rotation, bone_frame_dic["右ひざ"][n].rotation )
+            
             # 前回登録フレームとして保持
             prev_right_frame = n
 
         # 右足も左足も計算した場合
-        if prev_left_frame == prev_right_frame == n:
-            if heelpos != 0:
-                # 踵位置補正がかかっている場合、補正を加算する
-                left_ankle_pos.setY(left_ankle_pos.y() + heelpos)
-                right_ankle_pos.setY(right_ankle_pos.y() + heelpos)
-                bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() + heelpos )
+        # if prev_left_frame == prev_right_frame == n:
+
+            # if heelpos != 0:
+            #     # 踵位置補正がかかっている場合、補正を加算する
+            #     left_ankle_pos.setY(left_ankle_pos.y() + heelpos)
+            #     right_ankle_pos.setY(right_ankle_pos.y() + heelpos)
+            #     bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() + heelpos )
         # elif prev_left_frame != n and prev_right_frame != n:
         #     # 固定位置が近い方のINDEXを取得する
         #     prev_idx = prev_left_frame if prev_left_frame <= prev_right_frame else prev_right_frame
@@ -1392,7 +1793,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
 
         # logger.debug("left_ankle_pos:{0}, right_ankle_pos: {1}".format(left_ankle_pos, right_ankle_pos))
 
-        # 両足IKがマイナスの場合
+        # 両足IKがマイナスの場合(地面にめり込んでいる場合)
         if left_ankle_pos.y() < 0 and right_ankle_pos.y() < 0:
             ankle_pos_max = np.max([left_ankle_pos.y(), right_ankle_pos.y()])
 
@@ -1403,7 +1804,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
             # センターも一緒にあげる
             left_ankle_pos.setY( left_ankle_pos.y() - ankle_pos_max )
             right_ankle_pos.setY( right_ankle_pos.y() - ankle_pos_max )
-            # bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
+            bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
             
             # logger.debug("center.y2:{0}".format(bone_frame_dic["センター"][n].position.y()))    
 
@@ -1411,19 +1812,63 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
             left_ik_rotation.setX(0)
             right_ik_rotation.setX(0)
 
+        # ジャンプしてる時と浮いてる時の区別がつかないので、一旦保留        
+        # if bone_frame_dic["センター"][n].position.y() > 0 \
+        #     and left_ankle_pos.y() >= 0 and abs(left_ik_rotation.toEulerAngles().x()) < 20 and abs(left_ik_rotation.toEulerAngles().y()) < 20 and abs(left_ik_rotation.toEulerAngles().z()) < 20 \
+        #     and right_ankle_pos.y() >= 0 and abs(right_ik_rotation.toEulerAngles().x()) < 20 and abs(right_ik_rotation.toEulerAngles().y()) < 20 and abs(right_ik_rotation.toEulerAngles().z()) < 20:
+        #     # Y軸が浮いていて、かつ足の角度が小さい場合、下向きに補正
+
+        #     # センターを補正
+        #     new_center_y = 0 - ( ( left_ankle_pos.y() + right_ankle_pos.y() ) / 2 ) 
+        #     # しゃがんでる場合、もともとセンターがマイナスの可能性があるので、その場合は上書きしない
+        #     if bone_frame_dic["センター"][n].position.y() > new_center_y:
+        #         logger.debug("浮きセンターY上書き n={0}, y={1}, new_y={2}".format(n, bone_frame_dic["センター"][n].position.y(), new_center_y))
+        #         bone_frame_dic["センター"][n].position.setY(new_center_y)
+
+        #     # Y軸はセンターマイナスで接地させる
+        #     left_ankle_pos.setY(0)
+        #     right_ankle_pos.setY(0)
+
+        #     # X回転もさせず、接地させる
+        #     left_ik_rotation.setX(0)
+        #     right_ik_rotation.setX(0)
+
         if left_ankle_pos.y() < 0 and right_ankle_pos.y() >= 0:
+            # センターが少ししゃがんでて、足が浮いている場合、下ろす
             # 左足だけの場合マイナス値は0に補正
             left_ankle_pos.setY(0)
 
             # X回転もさせず、接地させる
             left_ik_rotation.setX(0)
 
-        if right_ankle_pos.y() < 0 and left_ankle_pos.y() >= 0:
+        if (right_ankle_pos.y() < 0 and left_ankle_pos.y() >= 0):
             # 右足だけの場合マイナス値は0に補正
             right_ankle_pos.setY(0)
 
             # X回転もさせず、接地させる
             right_ik_rotation.setX(0)
+
+        # if abs(bone_frame_dic["上半身"][n].rotation.toEulerAngles().y()) < 30 and left_ankle_pos.y() == 0:
+        #     # 正面向きでY位置が0の場合、回転させず、接地させる
+        #     left_ik_rotation.setX(0)
+        #     left_ik_rotation.setY(0)
+        #     left_ik_rotation.setZ(0)
+
+        # if abs(bone_frame_dic["上半身"][n].rotation.toEulerAngles().y()) < 30 and right_ankle_pos.y() == 0:
+        #     # 正面向きでY位置が0の場合、回転させず、接地させる
+        #     right_ik_rotation.setX(0)
+        #     right_ik_rotation.setY(0)
+        #     right_ik_rotation.setZ(0)
+
+        # センターと足首までのY距離
+        bone_center_ankle_y = center_bone[1] - right_ankle_bone[1]
+        # logger.debug("bone_center_leg_y {0}".format(bone_center_leg_y))
+
+        # 足IKの位置が0で、センターが沈んでいる場合、ボーンのセンター位置に合わせて少しずらす
+        if ( abs(bone_frame_dic["センター"][n].position.y()) > bone_center_ankle_y ):
+            new_center_y = bone_frame_dic["センター"][n].position.y() - ( center_bone[1] - right_leg_bone[1] )
+            logger.debug("陥没センターY上書き n={0}, y={1}, new_y={2}".format(n, bone_frame_dic["センター"][n].position.y(), new_center_y))
+            bone_frame_dic["センター"][n].position.setY(new_center_y)
 
         bone_frame_dic["左足ＩＫ"][n].position = left_ankle_pos
         bone_frame_dic["左足ＩＫ"][n].rotation = left_ik_rotation
@@ -1433,7 +1878,7 @@ def calc_IK(bone_csv_file, smoothed_file, heelpos):
         bone_frame_dic["右足ＩＫ"][n].rotation = right_ik_rotation
         bone_frame_dic["右足"][n].rotation = right_leg_diff_rotation
 
-        # if n >= 5:
+        # if n >= 1800:
         #     sys.exit()
 
     #　ひざは登録除去
@@ -1611,20 +2056,40 @@ def calc_leg_angle(a, b, c):
     return angle
 
 # センターZの計算 
-def calc_center_z(depth_file, upright_idx, center_z_scale):
-    logger.debug("depth_file: "+ depth_file)
+def calc_center_z(smoothed_2d, depths, upright_idxs, center_xy_scale, center_z_scale):
 
-    depth_indexes = []
-    depth_values = []
-    # 深度ファイルからフレームINDEXを取得する
-    with open(depth_file, "r") as bf:
-        # カンマ区切りなので、csvとして読み込む
-        reader = csv.reader(bf)
+    if center_z_scale == 0:
+        return
 
-        for row in reader:
-            logger.debug("row[0] {0}, row[1]: {1}".format(row[0], row[1]))
-            depth_indexes.append(int(row[0]))
-            depth_values.append(float(row[1]))
+    # 直立インデックス 
+    upright_idx = upright_idxs[0]
+
+    # 全フレームの推定深度
+    depth_all_frames = []
+
+    # 添え字と腰深度の配列
+    depth_indexes = np.array(depths)[:, DEPTH_INDEX["index"]:DEPTH_INDEX["index"]+1].flatten()
+    waist_depth_values = np.array(depths)[:, DEPTH_INDEX["Wrist"]:DEPTH_INDEX["Wrist"]+1].flatten()
+
+    # logger.info(depth_indexes)
+    # logger.info(waist_depth_values)
+
+    # もっともカメラに近付いた距離
+    nearest_depth = np.min(waist_depth_values)
+
+    # もっともカメラから遠のいた距離
+    furthest_depth = np.max(waist_depth_values)
+
+    # カメラからの遠近差
+    perspective_diff = furthest_depth - nearest_depth
+
+    logger.info("perspective_diff: {0}".format(perspective_diff))
+
+    # 遠近差をZスケールで割る
+    # 深度に対するZ移動量
+    perspective_diff_zscale = center_z_scale / perspective_diff
+
+    logger.info("perspective_diff_zscale: {0}".format(perspective_diff_zscale))
 
     # 直立にもっとも近いINDEXを取得する
     upright_nearest_idx = get_nearest_idx(depth_indexes, upright_idx)
@@ -1632,39 +2097,124 @@ def calc_center_z(depth_file, upright_idx, center_z_scale):
     logger.debug("upright_nearest_idx: {0}".format(upright_nearest_idx))
 
     # 直立近似INDEXの深度を取得する
-    upright_depth = depth_values[upright_nearest_idx]
+    upright_depth = waist_depth_values[upright_nearest_idx]
 
     logger.debug("upright_depth: {0}".format(upright_depth))
 
+    # 直立INDEXの上半身の長さ
+    upright_upper_length = (((smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]].y() + smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]].y() ) / 2) - smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]].y()) / center_xy_scale    
+
+    tu_nidxs = []
+    tu_upper_lengths = []
+    tu_depths = []
+    for tui in upright_idxs:
+
+        # 直立にもっとも近いINDEXを取得する
+        tunidx = int(get_nearest_idx(depth_indexes, tui))
+
+        # logger.info(tui)
+        # logger.info(tunidx)
+
+        # 体幹直立近似フレームの深度インデックス
+        d_tunidx = int(depth_indexes[tunidx])
+
+        # 既に同じインデックスがあったらスルー
+        if d_tunidx in tu_nidxs:
+            continue
+
+        # 体幹直立近似フレームのインデックス
+        tu_nidxs.append(d_tunidx)
+        # 体幹直立近似フレームの上半身の長さ
+        tu_upper_lengths.append( ((( smoothed_2d[d_tunidx][SMOOTHED_2D_INDEX["RHip"]].y() + smoothed_2d[d_tunidx][SMOOTHED_2D_INDEX["LHip"]].y() ) / 2) - smoothed_2d[d_tunidx][SMOOTHED_2D_INDEX["Neck"]].y()) / center_xy_scale )
+        # 体幹直立近似フレームの深度
+        tu_depths.append(float(waist_depth_values[tunidx]) * center_z_scale)
+
+        # 3件超えたら終了  
+        if len(tu_nidxs) >= 3:
+            break
+        
+    logger.debug(tu_nidxs)
+    logger.debug(tu_upper_lengths)
+    logger.debug(tu_depths)
+    
+    # 視野角
+    radians = []
+    for n in range(3):
+        radian = math.atan2( tu_upper_lengths[n], tu_depths[n] )
+        deg = math.degrees(radian)
+        logger.debug("x={0}, y={1}, r={2}, d={3}".format(tu_depths[n], tu_upper_lengths[n], radian, deg))
+        
+        radians.append(radian)
+
+    view_radian = np.average(np.array(radians))
+    logger.info("画角推定 ラジアン=%s 角度=%s", view_radian, math.degrees(view_radian))
+
+    # 直立だった場合の上半身の長さ
+    upright_upper_length_estimate = upright_depth * math.tan(view_radian)
+
     for idx, n in enumerate(depth_indexes) :
         # 深度のINDEX1件ごとにセンターZ計算
+        nn = int(n)
 
-        now_depth = depth_values[idx] - upright_depth
-
-        logger.debug("n: {0}, now_depth: {1}, result: {2}".format(n, now_depth, (now_depth * center_z_scale)))
+        # 現在の深度
+        now_depth = waist_depth_values[idx] - upright_depth
 
         # センターZ
-        bone_frame_dic["センター"][n].position.setZ(now_depth * center_z_scale)
+        center_z = now_depth * center_z_scale * perspective_diff_zscale
 
-        if n > 0:
+        # 直立だった場合の上半身の長さ
+        now_upright_upper_length = (now_depth + upright_depth) * math.tan(view_radian)
+
+        # センターY調整値
+        center_y_adjust = (upright_upper_length_estimate - now_upright_upper_length) / center_z_scale
+
+        logger.debug("nn: {0}, d: {1}, z: {2}, l:{3} y: {4}".format(nn, now_depth, center_z, now_upright_upper_length, center_y_adjust))
+        
+        # センターZ
+        bone_frame_dic["センター"][nn].position.setZ(float(center_z))
+        
+        # センターY
+        # bone_frame_dic["センター"][nn].position.setY(bone_frame_dic["センター"][nn].position.y() + float(center_y_adjust))
+
+        # 深度リストに追加
+        depth_all_frames.append(float(now_depth))
+
+        if nn > 0:
             # 1F以降の場合、その間のセンターも埋める
-            prev_depth = depth_values[idx - 1] - upright_depth
-            prev_idx = depth_indexes[idx - 1]
+            prev_depth = waist_depth_values[idx - 1] - upright_depth
+            prev_idx = int(depth_indexes[idx - 1])
 
             # 前回との間隔
-            interval = n - prev_idx
+            interval = nn - prev_idx
 
             # 前回との間隔の差分
             diff_depth = now_depth - prev_depth
 
             logger.debug("prev_idx: {0}, prev_depth: {1}, interval: {2}, diff_depth: {3}".format(prev_idx, prev_depth, interval, diff_depth))
             
-            for midx, m in enumerate(range(prev_idx + 1, n)):
+            for midx, m in enumerate(range(prev_idx + 1, nn)):
                 interval_depth = prev_depth + ( (diff_depth / interval) * (midx + 1) )
 
-                logger.debug("m: {0}, interval_depth: {1}".format(m, interval_depth))
+                # 深度リストに追加
+                depth_all_frames.append(float(interval_depth))
 
-                bone_frame_dic["センター"][m].position.setZ(interval_depth * center_z_scale)
+                # センターZ
+                center_z = interval_depth * center_z_scale * perspective_diff_zscale
+
+                # 直立だった場合の上半身の長さ
+                now_upright_upper_length = (interval_depth + upright_depth) * math.tan(view_radian)
+
+                # センターY調整値
+                center_y_adjust = (upright_upper_length_estimate - now_upright_upper_length) / center_z_scale
+
+                logger.debug("nn: {0}, d: {1}, z: {2}, l:{3} y: {4}".format(nn, interval_depth, center_z, now_upright_upper_length, center_y_adjust))
+
+                bone_frame_dic["センター"][m].position.setZ(float(center_z))
+                
+                # センターY
+                # bone_frame_dic["センター"][m].position.setY(bone_frame_dic["センター"][m].position.y() + float(center_y_adjust))
+
+    return depth_all_frames
                 
 def get_nearest_idx(target_list, num):
     """
@@ -1682,14 +2232,25 @@ def get_nearest_idx(target_list, num):
     return idx
 
 # センターの計算
-def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, center_xy_scale, center_z_scale):
+def calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos):
+
+    if center_xy_scale == 0:
+        return
+
     logger.debug("bone_csv_file: "+ bone_csv_file)
+
+    # 直立インデックス
+    upright_idx = upright_idxs[0]
 
     # ボーンファイルを開く
     with open(bone_csv_file, "r",  encoding=get_file_encoding(bone_csv_file)) as bf:
         reader = csv.reader(bf)
 
         for row in reader:
+
+            if row[1] == "センター" or row[2].lower() == "center":
+                # センターボーン
+                center_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
             if row[1] == "首" or row[2].lower() == "neck":
                 # 首ボーン
@@ -1711,9 +2272,6 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
                 # 左足首ボーン
                 left_ankle_3d = QVector3D(float(row[5]), float(row[6]), float(row[7]))
 
-    # 関節二次元情報を読み込み
-    smoothed_2d = load_smoothed_2d(smoothed_file)
-
     # logger.debug("neck_3d")
     # logger.debug(neck_3d)
     # logger.debug("right_leg_3d")
@@ -1730,7 +2288,7 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     # logger.debug(smoothed_2d[upright_idx])
 
     # 直立フレームの三角形面積
-    smoothed_upright_area = calc_triangle_area(smoothed_2d[upright_idx][0], smoothed_2d[upright_idx][1], smoothed_2d[upright_idx][2])
+    smoothed_upright_area = calc_triangle_area(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]], smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]], smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]])
 
     # logger.debug("upright_area")
     # logger.debug(smoothed_upright_area)
@@ -1742,22 +2300,25 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     # logger.debug(upright_xy_scale)
 
     # 直立フレームの左足と右足の位置の平均
-    upright_leg_avg = abs((smoothed_2d[upright_idx][1].y() + smoothed_2d[upright_idx][2].y()) / 2)
+    upright_leg_avg = abs((smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]].y() + smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]].y()) / 2)
 
     # 直立フレームの左足首と右足首の位置の平均
-    upright_ankle_avg = abs((smoothed_2d[upright_idx][3].y() + smoothed_2d[upright_idx][4].y()) / 2)
+    upright_ankle_avg = abs((smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RAnkle"]].y() + smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LAnkle"]].y()) / 2)
 
     # logger.debug("upright_ankle_avg")
     # logger.debug(upright_ankle_avg)
 
     # ボーンの足首のY位置
-    bone_anke_y = right_ankle_3d[1]
+    bone_anke_y = (right_ankle_3d[1] + left_ankle_3d[1]) / 2
 
     # logger.debug("bone_anke_y")
     # logger.debug(bone_anke_y)
 
-    # 足首位置の比率
-    upright_ankle_scale = (bone_anke_y / upright_ankle_avg) * (center_xy_scale / 100)
+    # 足首位置の比率(上半身のみでゼロ割対策)
+    if upright_ankle_avg != 0:
+        upright_ankle_scale = (bone_anke_y / upright_ankle_avg) * (center_xy_scale / 100)
+    else:
+        upright_ankle_scale = 0
 
     # # 上半身から首までの距離
     # neck_upright_distance = upper_body_3d.distanceToPoint(neck_3d)
@@ -1778,13 +2339,13 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
     # logger.debug(right_leg_upright_distance)
 
     # 3Dでの首・左足・右足の投影三角形
-    pos_upright_area = calc_triangle_area(positions_multi[upright_idx][8], positions_multi[upright_idx][1], positions_multi[upright_idx][4])
+    # pos_upright_area = calc_triangle_area(positions_multi[upright_idx][8], positions_multi[upright_idx][1], positions_multi[upright_idx][4])
 
     for n, smoothed in enumerate(smoothed_2d):
         logger.debug("センター計算 frame={0}".format(n))
 
-        # 左足首と右足首の位置の小さい方(上に上がってるのを下ろすだけなので、絶対値判定)
-        ankle_min = np.min([abs(smoothed_2d[n][1].y()), abs(smoothed_2d[n][2].y())])
+        # 左足と右足の位置の小さい方
+        ankle_min = np.min([smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]].y(), smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]].y()])
 
         # logger.debug("ankle_min")
         # logger.debug(ankle_min)
@@ -1793,31 +2354,37 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(ankle_min * upright_ankle_scale)
 
         # 左足と右足の位置の平均
-        leg_avg = abs((smoothed_2d[n][1].y() + smoothed_2d[n][2].y()) / 2)
+        leg_avg = abs((smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].y() + smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].y()) / 2)
         
         # 足の上下差
         leg_diff = upright_leg_avg - leg_avg
 
         # Y軸移動(とりあえずセンター固定)
-        bone_frame_dic["センター"][n].position.setY((leg_diff * upright_xy_scale) - (ankle_min * upright_ankle_scale))
+        center_y = (leg_diff * upright_xy_scale) - (ankle_min * upright_ankle_scale)
+
+        # 踵補正を入れて設定する
+        bone_frame_dic["センター"][n].position.setY(center_y + heelpos)
         # bone_frame_dic["センター"][n].position.setY((leg_diff * upright_xy_scale))
         
         # 首・左足・右足の中心部分をX軸移動
-        x_avg = ((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3) \
-                    - smoothed_2d[upright_idx][0].x()
-        bone_frame_dic["センター"][n].position.setX(x_avg * upright_xy_scale)
+        x_avg = ((smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x()) / 3) \
+                    - smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]].x()
+        center_x = x_avg * upright_xy_scale
+        bone_frame_dic["センター"][n].position.setX(center_x)
+
+        logger.debug("center {0} x={1}, y={2}".format(n, center_x, center_y))
 
         # 現在の映像の三角形面積
-        # now_smoothed_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
+        # now_smoothed_area = calc_triangle_area(smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]], smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]], smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]])
 
-        # logger.debug("smoothed_2d[n][0]")
-        # logger.debug(smoothed_2d[n][0])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]]")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]])
 
-        # logger.debug("smoothed_2d[n][1]")
-        # logger.debug(smoothed_2d[n][1])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]]")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]])
 
-        # logger.debug("smoothed_2d[n][2]")
-        # logger.debug(smoothed_2d[n][2])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]]")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]])
 
         # logger.debug("now_smoothed_area")
         # logger.debug(now_smoothed_area)
@@ -1863,14 +2430,14 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug(pos_scale ** 2)
 
         # 2Dでの首・左足・右足の投影三角形
-        # smoothed_now_area = calc_triangle_area(smoothed_2d[n][0], smoothed_2d[n][1], smoothed_2d[n][2])
+        # smoothed_now_area = calc_triangle_area(smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]], smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]], smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]])
 
-        # logger.debug("smoothed_2d[n][0]")    
-        # logger.debug(smoothed_2d[n][0])
-        # logger.debug("smoothed_2d[n][1]")    
-        # logger.debug(smoothed_2d[n][1])
-        # logger.debug("smoothed_2d[n][2]")    
-        # logger.debug(smoothed_2d[n][2])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]]")    
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]]")    
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]])
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]]")    
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]])
 
         # logger.debug("smoothed_upright_area")
         # logger.debug(smoothed_upright_area)
@@ -1908,9 +2475,9 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # # 傾いたところの頂点：首（傾きを反転させて正面向いた形にする）
         # smoothed_upright_slope_neck = calc_slope_point(smoothed_2d[upright_idx][8], rx * -1, ry * -1, rz * -1)
         # # 傾いたところの頂点：左足
-        # smoothed_upright_slope_left_leg = calc_slope_point(smoothed_2d[upright_idx][1], rx * -1, ry * -1, rz * -1)
+        # smoothed_upright_slope_left_leg = calc_slope_point(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]], rx * -1, ry * -1, rz * -1)
         # # 傾いたところの頂点：右足
-        # smoothed_upright_slope_right_leg = calc_slope_point(smoothed_2d[upright_idx][2], rx * -1, ry * -1, rz * -1)
+        # smoothed_upright_slope_right_leg = calc_slope_point(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]], rx * -1, ry * -1, rz * -1)
 
         # # 傾きを反転させた直立面積
         # smoothed_upright_slope_area = calc_triangle_area(smoothed_upright_slope_neck, smoothed_upright_slope_left_leg, smoothed_upright_slope_right_leg)
@@ -1926,14 +2493,14 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
 
         # if n == 340 or n == 341:
 
-        #     logger.debug("smoothed_2d[upright_idx][0]")
-        #     logger.debug(smoothed_2d[upright_idx][0])
+        #     logger.debug("smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]]")
+        #     logger.debug(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]])
 
-        #     logger.debug("smoothed_2d[upright_idx][1]")
-        #     logger.debug(smoothed_2d[upright_idx][1])
+        #     logger.debug("smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]]")
+        #     logger.debug(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["RHip"]])
 
-        #     logger.debug("smoothed_2d[upright_idx][2]")
-        #     logger.debug(smoothed_2d[upright_idx][2])
+        #     logger.debug("smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]]")
+        #     logger.debug(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["LHip"]])
 
         #     logger.debug("smoothed_upright_slope_neck")
         #     logger.debug(smoothed_upright_slope_neck)
@@ -2011,20 +2578,20 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         # logger.debug("leg_diff")
         # logger.debug(leg_diff)
         
-        # logger.debug("smoothed_2d[upright_idx][0].x()")
-        # logger.debug(smoothed_2d[upright_idx][0].x())
+        # logger.debug("smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]].x()")
+        # logger.debug(smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]].x())
         
-        # logger.debug("smoothed_2d[n][0].x()")
-        # logger.debug(smoothed_2d[n][0].x())
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x()")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x())
         
-        # logger.debug("smoothed_2d[n][1].x()")
-        # logger.debug(smoothed_2d[n][1].x())
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x()")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x())
         
-        # logger.debug("smoothed_2d[n][2].x()")
-        # logger.debug(smoothed_2d[n][2].x())
+        # logger.debug("smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x()")
+        # logger.debug(smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x())
         
-        # logger.debug("((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3)")
-        # logger.debug(((smoothed_2d[n][0].x() + smoothed_2d[n][1].x() + smoothed_2d[n][2].x()) / 3))
+        # logger.debug("((smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x()) / 3)")
+        # logger.debug(((smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x()) / 3))
         
         # logger.debug("x_avg")
         # logger.debug(x_avg)
@@ -2070,9 +2637,64 @@ def calc_center(smoothed_file, bone_csv_file, positions_multi, upright_idx, cent
         #     logger.debug(upper_body_qq.toEulerAngles())
         #     logger.debug(upper_body_qq.toVector4D())
 
+DEPTH_INDEX = {
+    "index": 0,
+    "Wrist": 1,
+    "RAnkle": 2,
+    "LAnkle": 3
+}
+
+# depthファイルの読み込み
+def load_depth(depth_file):
+    if os.path.exists(depth_file) == False:
+        return None
+
+    depths = [[0 for i in range(4)] for j in range(sum(1 for line in open(depth_file)))]
+
+    n = 0
+    # 深度ファイルからフレームINDEXを取得する
+    with open(depth_file, "r") as bf:
+        # カンマ区切りなので、csvとして読み込む
+        reader = csv.reader(bf)
+
+        for row in reader:
+            logger.debug("row[0] {0}, row[1]: {1}, row[2]: {2}, row[3]: {3}".format(row[0], row[1], row[2], row[3]))
+            depths[n][DEPTH_INDEX["index"]] = int(row[0])
+            depths[n][DEPTH_INDEX["Wrist"]] = float(row[1])
+            depths[n][DEPTH_INDEX["RAnkle"]] = float(row[2])
+            depths[n][DEPTH_INDEX["LAnkle"]] = float(row[3])
+        
+            n += 1
+
+    return depths
+
+SMOOTHED_2D_INDEX = {
+    "Nose": 0,
+    "Neck": 1,
+    "RShoulder": 2,
+    "RElbow": 3,
+    "RWrist": 4,
+    "LShoulder": 5,
+    "LElbow": 6,
+    "LWrist": 7,
+    "RHip": 8,
+    "RKnee": 9,
+    "RAnkle": 10,
+    "LHip": 11,
+    "LKnee": 12,
+    "LAnkle": 13,
+    "REye": 14,
+    "LEye": 15,
+    "REar": 16,
+    "LEar": 17,
+    "Background": 18
+}
+
 # 関節2次元情報を取得
 def load_smoothed_2d(smoothed_file):
-    smoothed_2d = [[0 for i in range(5)] for j in range(len(bone_frame_dic["首"]))]
+    # １次元：フレーム数分
+    # ２次元：OpenposeのINDEX分
+    smoothed_2d = [[0 for i in range(19)] for j in range(sum(1 for line in open(smoothed_file)))]
     n = 0
     with open(smoothed_file, "r") as sf:
         line = sf.readline() # 1行を文字列として読み込む(改行文字も含まれる)
@@ -2084,15 +2706,19 @@ def load_smoothed_2d(smoothed_file):
             # logger.debug(smoothed)
 
             # 首の位置
-            smoothed_2d[n][0] = QVector3D(float(smoothed[2]), float(smoothed[3]), 0)
+            smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]] = QVector3D(float(smoothed[2]), float(smoothed[3]), 0)
             # 右足付け根
-            smoothed_2d[n][1] = QVector3D(float(smoothed[16]), float(smoothed[17]), 0)
+            smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]] = QVector3D(float(smoothed[16]), float(smoothed[17]), 0)
             # 左足付け根
-            smoothed_2d[n][2] = QVector3D(float(smoothed[22]), float(smoothed[23]), 0)
+            smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]] = QVector3D(float(smoothed[22]), float(smoothed[23]), 0)
+            # 右ひざ
+            smoothed_2d[n][SMOOTHED_2D_INDEX["RKnee"]] = QVector3D(float(smoothed[18]), float(smoothed[19]), 0)
+            # 左ひざ
+            smoothed_2d[n][SMOOTHED_2D_INDEX["LKnee"]] = QVector3D(float(smoothed[24]), float(smoothed[25]), 0)
             # 右足首
-            smoothed_2d[n][3] = QVector3D(float(smoothed[20]), float(smoothed[21]), 0)
+            smoothed_2d[n][SMOOTHED_2D_INDEX["RAnkle"]] = QVector3D(float(smoothed[20]), float(smoothed[21]), 0)
             # 左足首
-            smoothed_2d[n][4] = QVector3D(float(smoothed[26]), float(smoothed[27]), 0)
+            smoothed_2d[n][SMOOTHED_2D_INDEX["LAnkle"]] = QVector3D(float(smoothed[26]), float(smoothed[27]), 0)
         
             n += 1
 
@@ -2184,21 +2810,27 @@ def calc_triangle_area(a, b, c):
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
 
-def position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos):
+def position_multi_file_to_vmd(position_file, position_gan_file, vmd_file, smoothed_file, bone_csv_file, depth_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times):
     positions_multi = read_positions_multi(position_file)
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, upright_idx, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos)
+    
+    # 3dpose-gan がない場合はNone
+    if os.path.exists(position_gan_file):
+        positions_gan_multi = read_positions_multi(position_gan_file)
+    else:
+        positions_gan_multi = None
+
+    position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times)
     
 def make_showik_frames(is_ik):
-    if is_ik:
-        return None
+    onoff = 1 if is_ik == True else 0
 
     frames = []
     sf = VmdShowIkFrame()
     sf.show = 1
-    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x91\xab\x82\x68\x82\x6a', 0)) # '左足ＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x89\x45\x91\xab\x82\x68\x82\x6a', 0)) # '右足ＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '左つまＩＫ'
-    sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', 0)) # '右つまＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x91\xab\x82\x68\x82\x6a', onoff)) # '左足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x91\xab\x82\x68\x82\x6a', onoff)) # '右足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', onoff)) # '左つまＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', onoff)) # '右つまＩＫ'
     frames.append(sf)
     return frames
 
@@ -2234,21 +2866,21 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='3d-pose-baseline to vmd')
     parser.add_argument('-t', '--target', dest='target', type=str,
-                        help='target directory')
+                        help='target directory (3d-pose-baseline-vmd)')
     parser.add_argument('-b', '--bone', dest='bone', type=str,
                         help='target model bone csv')
     parser.add_argument('-v', '--verbose', dest='verbose', type=int,
                         default=2,
                         help='logging level')
-    parser.add_argument('-u', '--upright-frame', dest='upright', type=int,
-                        default=0,
-                        help='upright frame index')
     parser.add_argument('-c', '--center-xyscale', dest='centerxy', type=int,
                         default=0,
                         help='center scale')
     parser.add_argument('-z', '--center-z-scale', dest='centerz', type=float,
                         default=0,
                         help='center z scale')
+    parser.add_argument('-s', '--smooth-times', dest='smooth_times', type=int,
+                        default=1,
+                        help='smooth times')
     parser.add_argument('-x', '--x-angle', dest='xangle', type=int,
                         default=0,
                         help='global x angle correction')
@@ -2283,16 +2915,38 @@ if __name__ == '__main__':
     position_file = base_dir + "/pos.txt"
     smoothed_file = base_dir + "/smoothed.txt"
     depth_file = base_dir + "/depth.txt"
+
+    # 3dpose-gan のposファイル。（ない可能性あり）
+    position_gan_file = base_dir + "/pos_gan.txt"
+
     suffix = ""
-    if args.mdecimation == 0 and args.idecimation == 0 and args.ddecimation == 0:
-        suffix = "_間引きなし"
-    elif is_alignment == False:
-        suffix = "_揃えなし"
+    if os.path.exists(position_gan_file) == False:
+        suffix = "_ganなし"
     
     if is_ik == False:
-        suffix = "_FK{0}".format(suffix)
+        suffix = "{0}_FK".format(suffix)
+    
+    # 踵位置補正
+    suffix = "{0}_h{1}".format(suffix, str(args.heelpos))
+    
+    # センターXY
+    suffix = "{0}_xy{1}".format(suffix, str(args.centerxy))
+
+    # センターZ        
+    suffix = "{0}_z{1}".format(suffix, str(args.centerz))
+    
+    # グローバルX補正
+    suffix = "{0}_gx{1}".format(suffix, str(args.xangle))
+    
+    # 円滑化回数
+    suffix = "{0}_s{1}".format(suffix, str(args.smooth_times))
         
-    vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}{2}.vmd".format(base_dir, datetime.datetime.now(), suffix)
+    if args.mdecimation == 0 and args.idecimation == 0 and args.ddecimation == 0:
+        suffix = "{0}_間引きなし".format(suffix)
+    elif is_alignment == False:
+        suffix = "{0}_揃えなし".format(suffix)
+
+    vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}_[uDDDD]{2}.vmd".format(base_dir, datetime.datetime.now(), suffix)
 
     # ログレベル設定
     logger.setLevel(level[args.verbose])
@@ -2302,6 +2956,4 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, vmd_file, smoothed_file, args.bone, depth_file, args.upright - 1, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos)
-
-    logger.info("VMDファイル出力完了: {0}".format(vmd_file))
+    position_multi_file_to_vmd(position_file, position_gan_file, vmd_file, smoothed_file, args.bone, depth_file, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos, args.smooth_times)
