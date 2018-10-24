@@ -58,9 +58,9 @@ bone_frame_dic = {
 }
 
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times):
+def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times, upright_target):
     writer = VmdWriter()
-
+    
     # 開始フレームインデックス
     start_frame = load_start_frame(start_frame_file)
     logger.info("開始フレームインデックス: %d", start_frame)
@@ -89,9 +89,12 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, s
     logger.info(upright_idxs)
 
     logger.info("センター計算開始")
-    
+
+    # センター調整
+    target_upright_idx, target_start_pos = load_upright_target(upright_target)
+
     # センターの計算
-    calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos)
+    calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos, target_upright_idx, target_start_pos)
 
     depths = load_depth(depth_file)
 
@@ -101,7 +104,7 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, s
         logger.info("センターZ計算開始")
 
         # センターZの計算
-        depth_all_frames = calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale)
+        depth_all_frames = calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_start_pos)
 
     # 角度をなめらかに
     smooth_angle(smooth_times, ["上半身", "上半身2", "下半身", "首", "頭", "左肩", "左腕", "左ひじ", "右肩",  "右腕", "右ひじ", "左足", "左ひざ", "右足", "右ひざ"])
@@ -136,6 +139,25 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, s
 
     # センターを滑らかに
     smooth_move(smooth_times, ["センター"])
+
+    # 直立関連ファイルに情報出力
+    # 直立IDX
+    upright_file.write(str(upright_idxs[0]))
+    upright_file.write("\n")
+    # 先頭フレームのセンターpos
+    center_pos = bone_frame_dic["センター"][0].position
+    upright_file.write("center,{0},{1},{2}".format(center_pos.x(), center_pos.y(), center_pos.z()))
+    upright_file.write("\n")
+    # 先頭フレームの2D
+    # logger.info("upright: %s", upright_idxs[0])
+    for key in ["Neck", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle"]:
+        # logger.info("key: %s, v: %s", k, v)
+        s2d = smoothed_2d[0][SMOOTHED_2D_INDEX[key]]
+        # logger.info(s2d)
+        upright_file.write("{0},{1},{2},{3}".format(key, s2d.x(), s2d.y(), s2d.z()))
+        upright_file.write("\n")
+
+    upright_file.close()
 
     logger.info("グルーブ移管開始")
 
@@ -728,6 +750,40 @@ def load_start_frame(start_frame_file):
     with open(start_frame_file, "r") as sf:
         return int(sf.readline())
 
+# 調整直立情報取得
+def load_upright_target(upright_target):
+
+    target_upright_idx = 0
+    target_start_pos = {}
+    if os.path.exists(upright_target):
+        # 直立調整対象ファイルが存在する場合
+        with open(upright_target +"/upright.txt", "r") as bf:
+            # 直立IDX
+            target_upright_idx = int(bf.readline())
+            # 0Fセンターpos
+            while True:
+                s_line = bf.readline()
+
+                if not s_line:
+                    break
+
+                # 直立の各数値取得
+                poss = s_line.split(",")
+                target_start_pos[poss[0]] = QVector3D()
+                target_start_pos[poss[0]].setX(float(poss[1]))
+                target_start_pos[poss[0]].setY(float(poss[2]))
+                target_start_pos[poss[0]].setZ(float(poss[3]))
+    else:
+        # 直立調整対象ファイルが存在しない場合、初期値
+        target_start_pos["center"] = QVector3D()
+        for key in ["Neck", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle"]:
+            target_start_pos[key] = QVector3D()
+            
+    # logger.info("target_start_pos")
+    # logger.info(target_start_pos)
+
+    return target_upright_idx, target_start_pos
+            
 # 全身で最も直立している姿勢をいくつか返す
 def calc_upright_body():
     return calc_upright_bones( ["上半身", "上半身2", "下半身", "左足", "左ひざ", "右足", "右ひざ"])
@@ -1724,7 +1780,7 @@ def calc_leg_angle(a, b, c):
     return angle
 
 # センターZの計算 
-def calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale):
+def calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_start_pos):
 
     if center_z_scale == 0:
         return
@@ -1807,7 +1863,7 @@ def calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scal
     
     # 視野角
     radians = []
-    for n in range(3):
+    for n in range(len(tu_nidxs[:3])):
         radian = math.atan2( tu_upper_lengths[n], tu_depths[n] )
         deg = math.degrees(radian)
         logger.debug("x={0}, y={1}, r={2}, d={3}".format(tu_depths[n], tu_upper_lengths[n], radian, deg))
@@ -1843,7 +1899,7 @@ def calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scal
         logger.debug("nn: {0}, d: {1}, z: {2}, l:{3} y: {4}".format(nn, now_depth, center_z, now_upright_upper_length, center_y_adjust))
         
         # センターZ
-        bone_frame_dic["センター"][nn - start_frame].position.setZ(float(center_z))
+        bone_frame_dic["センター"][nn - start_frame].position.setZ(float(center_z) + target_start_pos["center"].z())
         
         # センターY
         bone_frame_dic["センター"][nn - start_frame].position.setY(bone_frame_dic["センター"][nn - start_frame].position.y() + float(center_y_adjust))
@@ -1881,7 +1937,7 @@ def calc_center_z(smoothed_2d, depths, start_frame, upright_idxs, center_xy_scal
 
                 logger.debug("m: {0}, d: {1}, z: {2}, l:{3} y: {4}".format(m, interval_depth, center_z, now_upright_upper_length, center_y_adjust))
 
-                bone_frame_dic["センター"][m - start_frame].position.setZ(float(center_z))
+                bone_frame_dic["センター"][m - start_frame].position.setZ(float(center_z) + target_start_pos["center"].z())
                 
                 # センターY
                 bone_frame_dic["センター"][m - start_frame].position.setY(bone_frame_dic["センター"][m - start_frame].position.y() + float(center_y_adjust))
@@ -1904,7 +1960,7 @@ def get_nearest_idx(target_list, num):
     return idx
 
 # センターの計算
-def calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos):
+def calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos, target_upright_idx, target_start_pos):
 
     if center_xy_scale == 0:
         return
@@ -1912,7 +1968,7 @@ def calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, cente
     logger.debug("bone_csv_file: "+ bone_csv_file)
 
     # 直立インデックス
-    upright_idx = upright_idxs[0]
+    upright_idx = upright_idxs[0]    
 
     # ボーンファイルを開く
     with open(bone_csv_file, "r",  encoding=get_file_encoding(bone_csv_file)) as bf:
@@ -2042,7 +2098,7 @@ def calc_center(smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, cente
         x_avg = ((smoothed_2d[n][SMOOTHED_2D_INDEX["Neck"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["RHip"]].x() + smoothed_2d[n][SMOOTHED_2D_INDEX["LHip"]].x()) / 3) \
                     - smoothed_2d[upright_idx][SMOOTHED_2D_INDEX["Neck"]].x()
         center_x = x_avg * upright_xy_scale
-        bone_frame_dic["センター"][n].position.setX(center_x)
+        bone_frame_dic["センター"][n].position.setX(center_x + target_start_pos["center"].x())
 
         logger.debug("center {0} x={1}, y={2}".format(n, center_x, center_y))
 
@@ -2811,7 +2867,7 @@ def decimate_bone_ik_frames_array(base_dir, bone_name_array, idecimation, ddecim
     #         plt.close()
 
 
-def position_multi_file_to_vmd(position_file, position_gan_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times):
+def position_multi_file_to_vmd(position_file, position_gan_file, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times, upright_target):
     positions_multi = read_positions_multi(position_file)
     
     # 3dpose-gan がない場合はNone
@@ -2820,7 +2876,7 @@ def position_multi_file_to_vmd(position_file, position_gan_file, vmd_file, smoot
     else:
         positions_gan_multi = None
 
-    position_list_to_vmd_multi(positions_multi, positions_gan_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times)
+    position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, xangle, mdecimation, idecimation, ddecimation, alignment, is_ik, heelpos, smooth_times, upright_target)
     
 def make_showik_frames(is_ik):
     onoff = 1 if is_ik == True else 0
@@ -2868,6 +2924,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='3d-pose-baseline to vmd')
     parser.add_argument('-t', '--target', dest='target', type=str,
                         help='target directory (3d-pose-baseline-vmd)')
+    parser.add_argument('-u', '--upright-target', dest='upright_target', type=str,
+                        default='',
+                        help='upright target directory')
     parser.add_argument('-b', '--bone', dest='bone', type=str,
                         help='target model bone csv')
     parser.add_argument('-v', '--verbose', dest='verbose', type=int,
@@ -2955,6 +3014,9 @@ if __name__ == '__main__':
 
     vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}_[uDDDD]{2}.vmd".format(base_dir, datetime.datetime.now(), suffix)
 
+    #直立インデックスファイル
+    upright_file = open("{0}/upright.txt".format(base_dir), 'w')
+
     # ログレベル設定
     logger.setLevel(level[args.verbose])
 
@@ -2963,4 +3025,4 @@ if __name__ == '__main__':
     # if os.path.exists('predictor/shape_predictor_68_face_landmarks.dat'):
     #     head_rotation = 
 
-    position_multi_file_to_vmd(position_file, position_gan_file, vmd_file, smoothed_file, args.bone, depth_file, start_frame_file, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos, args.smooth_times)
+    position_multi_file_to_vmd(position_file, position_gan_file, upright_file, vmd_file, smoothed_file, args.bone, depth_file, start_frame_file, args.centerxy, args.centerz, args.xangle, args.mdecimation, args.idecimation, args.ddecimation, is_alignment, is_ik, args.heelpos, args.smooth_times, args.upright_target)

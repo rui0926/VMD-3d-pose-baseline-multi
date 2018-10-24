@@ -9,6 +9,7 @@ cd /d %~dp0
 rem ---  3d-pose-baseline-vmd解析結果JSONディレクトリパス
 echo 3d-pose-baseline-vmdの解析結果ディレクトリの絶対パスを入力して下さい。(3d_{実行日時}_idx00)
 echo この設定は半角英数字のみ設定可能で、必須項目です。
+echo ,(カンマ)で5件まで設定可能です。
 set TARGET_DIR=
 set /P TARGET_DIR=■3d-pose-baseline-vmd 解析結果ディレクトリパス: 
 rem echo TARGET_DIR：%TARGET_DIR%
@@ -50,6 +51,7 @@ echo 踵のY軸補正値を数値(小数可)で入力して下さい。
 echo マイナス値を入力すると地面に近付き、プラス値を入力すると地面から遠ざかります。
 echo ある程度は自動で補正しますが、補正しきれない場合に、設定して下さい。
 echo 何も入力せず、ENTERを押下した場合、補正を行いません。
+echo ,(カンマ)で5件まで設定可能です。
 set /P HEEL_POSITION="踵位置補正: "
 
 
@@ -61,6 +63,7 @@ set CENTER_XY_SCALE=30
 echo センターXY移動に掛ける倍率を整数で入力して下さい。
 echo 値が小さいほど、センターXY移動の幅が小さくなります。
 echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
+echo ,(カンマ)で5件まで設定可能です。
 set /P CENTER_XY_SCALE="センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
@@ -71,6 +74,7 @@ echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
 echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_Z_SCALE%」で処理します。
 echo 0を入力した場合、センターZ軸移動を行いません。
+echo ,(カンマ)で5件まで設定可能です。
 set /P CENTER_Z_SCALE="センターZ移動倍率: "
 
 rem ---  グローバルX軸角度補正
@@ -90,6 +94,7 @@ echo モーションの円滑化の度数を指定します
 echo 1以上の整数のみを入力して下さい。
 echo 度数が大きいほど、円滑化されます。（代わりに動作が小さくなります）
 echo 何も入力せず、ENTERを押下した場合、%SMOOTH_TIMES%回円滑化します。
+echo ,(カンマ)で5件まで設定可能です。
 set /P SMOOTH_TIMES="円滑化度数: "
 
 rem ---  センター移動間引き量
@@ -161,8 +166,42 @@ IF /I "%IS_DEBUG%" EQU "yes" (
     set VERBOSE=3
 )
 
+rem -----------------------------------------
+
+set UPRIGHT_TARGET_DIR=
+
+rem -- baseline解析結果ディレクトリ
+for %%u in (%TARGET_DIR%) do (
+    echo %%u
+
+    rem -- 踵位置補正
+    for %%h in (%HEEL_POSITION%) do (
+        rem -- センターXY移動倍率
+        for %%x in (%CENTER_XY_SCALE%) do (
+            rem -- センターZ移動倍率
+            for %%z in (%CENTER_Z_SCALE%) do (
+                rem -- 滑らかさ
+                for %%s in (%SMOOTH_TIMES%) do (
+                    
+                    echo -----------------------------
+                    echo baselineディレクトリ: %%u
+                    echo 踵位置補正: %%h
+                    echo センターXY移動倍率: %%x
+                    echo センターZ移動倍率: %%z
+                    echo 滑らかさ: %%s
+                    
+                    rem ---  python 実行
+                    python applications\pos2vmd_multi.py -v %VERBOSE% -t "%%u" -b %MODEL_BONE_CSV% -c %%x -z %%z -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %%h -s %%s -u "%UPRIGHT_TARGET_DIR%"
+                )
+            )
+        )
+    )
+    
+    if /I "%UPRIGHT_TARGET_DIR%" EQU "" (
+        rem -- 直立未指定の場合、最初の値を保持
+        set UPRIGHT_TARGET_DIR=%%u
+    )
+)
 
 
-rem ---  python 実行
-python applications\pos2vmd_multi.py -v %VERBOSE% -t "%TARGET_DIR%" -b %MODEL_BONE_CSV% -c %CENTER_XY_SCALE% -z %CENTER_Z_SCALE% -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %HEEL_POSITION% -s %SMOOTH_TIMES%
 
