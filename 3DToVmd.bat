@@ -25,7 +25,7 @@ echo --------------
 set MODEL_BONE_CSV=born\‚ ‚Ι‚ά‚³®ƒ~ƒNƒ{[ƒ“.csv
 echo ƒgƒ[ƒX‘ΞΫƒ‚ƒfƒ‹‚Μƒ{[ƒ“\‘ΆCSVƒtƒ@ƒCƒ‹‚Μ‘‘Ξ‚ΰ‚µ‚­‚Νβ‘ΞƒpƒX‚π“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡Au%MODEL_BONE_CSV%v‚Μƒtƒ@ƒCƒ‹‚π“Η‚έ‚έ‚ά‚·B
-set /P MODEL_BONE_CSV="ƒ{[ƒ“\‘ΆCSVƒtƒ@ƒCƒ‹: "
+set /P MODEL_BONE_CSV="΅ƒ{[ƒ“\‘ΆCSVƒtƒ@ƒCƒ‹: "
 
 rem ---  FK or IK
 
@@ -35,7 +35,7 @@ echo no ‚π“ό—Ν‚µ‚½κ‡AFK‚Εo—Ν‚µ‚ά‚·
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡AIK‚Εo—Ν‚µ‚ά‚·B
 set IK_FLAG=1
 set IS_IK=yes
-set /P IS_IK="‘«IKo—Ν¥”ρ[yes/no]: "
+set /P IS_IK="΅‘«IKo—Ν¥”ρ[yes/no]: "
 
 IF /I "%IS_IK%" EQU "no" (
     set IK_FLAG=0
@@ -52,7 +52,7 @@ echo ƒ}ƒCƒiƒX’l‚π“ό—Ν‚·‚ι‚Ζ’n–Κ‚Ι‹ί•t‚«Aƒvƒ‰ƒX’l‚π“ό—Ν‚·‚ι‚Ζ’n–Κ‚©‚η‰“‚΄‚©‚θ‚ά‚
 echo ‚ ‚ι’φ“x‚Ν©“®‚Ε•β³‚µ‚ά‚·‚ªA•β³‚µ‚«‚κ‚Θ‚Άκ‡‚ΙAέ’θ‚µ‚Δ‰Ί‚³‚ΆB
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A•β³‚πs‚Ά‚ά‚Ή‚ρB
 echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
-set /P HEEL_POSITION="ζωΚ’u•β³: "
+set /P HEEL_POSITION="΅ζωΚ’u•β³: "
 
 
 :CONFIRM_CENTER
@@ -64,7 +64,7 @@ echo ƒZƒ“ƒ^[XYΪ“®‚Ι|‚―‚ι”{—¦‚π®”‚Ε“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
 echo ’l‚ª¬‚³‚Ά‚Ω‚ΗAƒZƒ“ƒ^[XYΪ“®‚Μ•‚ª¬‚³‚­‚Θ‚θ‚ά‚·B
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A”{—¦u%CENTER_XY_SCALE%v‚Ε—‚µ‚ά‚·B
 echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
-set /P CENTER_XY_SCALE="ƒZƒ“ƒ^[XYΪ“®”{—¦: "
+set /P CENTER_XY_SCALE="΅ƒZƒ“ƒ^[XYΪ“®”{—¦: "
 
 rem ---  ƒZƒ“ƒ^[ZΪ“®”{—¦
 echo --------------
@@ -75,16 +75,7 @@ echo –Ϊΐ‚Ζ‚µ‚ΔAƒJƒƒ‰‚©‚η‚Μ‹——£‚ª‹ί‚Ά‚Ω‚ΗA”{—¦‚π¬‚³‚­‚µ‚½•ϋ‚ª‚Ά‚Ά‚Ε‚·B
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A”{—¦u%CENTER_Z_SCALE%v‚Ε—‚µ‚ά‚·B
 echo 0‚π“ό—Ν‚µ‚½κ‡AƒZƒ“ƒ^[Z²Ϊ“®‚πs‚Ά‚ά‚Ή‚ρB
 echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
-set /P CENTER_Z_SCALE="ƒZƒ“ƒ^[ZΪ“®”{—¦: "
-
-rem ---  ƒOƒ[ƒoƒ‹X²p“x•β³
-
-echo --------------
-set GROBAL_X_ANGLE=15
-echo 3D‰»‚µ‚½Ϋ‚ΙƒOƒ[ƒoƒ‹X²‚Ια±X‚­‚Μ‚π•β³‚µ‚ά‚·
-echo -180`180“x‚Μ®”‚Μ‚έ‚π“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
-echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A%GROBAL_X_ANGLE%“x‰ρ“]‚µ‚ά‚·B
-set /P GROBAL_X_ANGLE="ƒOƒ[ƒoƒ‹X²p“x•β³: "
+set /P CENTER_Z_SCALE="΅ƒZƒ“ƒ^[ZΪ“®”{—¦: "
 
 rem ---  ‚η‚©‚³
 
@@ -97,58 +88,35 @@ echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A%SMOOTH_TIMES%‰ρ‰~‰»‚µ‚ά‚·B
 echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
 set /P SMOOTH_TIMES="‰~‰»“x”: "
 
-rem ---  ƒZƒ“ƒ^[Ϊ“®Τψ‚«—Κ
+rem ---  Ϊ“®Τψ‚«—Κ
 
 echo --------------
-set CENTER_DECIMATION_MOVE=0
-echo ƒZƒ“ƒ^[ƒL[‚ΜΤψ‚«‚Ιg—p‚·‚ιΪ“®—Κ‚π”’l(¬”‰Β)‚Εw’θ‚µ‚ά‚·
+set THRESHOLD_POS=0.5
+echo Ϊ“®ƒL[iIKEƒZƒ“ƒ^[j‚ΜΤψ‚«‚Ιg—p‚·‚ιΪ“®—Κ‚π”’l(¬”‰Β)‚Εw’θ‚µ‚ά‚·
 echo w’θ‚³‚κ‚½”ΝΝ“ΰ‚ΜΪ“®‚ª‚ ‚Α‚½κ‡‚ΙΤψ‚«‚³‚κ‚ά‚·B
-echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡Au%CENTER_DECIMATION_MOVE%v‚ΜΪ“®—Κ‚ΕΤψ‚«‚ά‚·B
-echo ƒZƒ“ƒ^[Ϊ“®Τψ‚«—Κ‚π0‚Ι‚µ‚½κ‡AΤψ‚«‚πs‚Ά‚ά‚Ή‚ρB
-set /P CENTER_DECIMATION_MOVE="ƒZƒ“ƒ^[Ϊ“®Τψ‚«—Κ: "
+echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡Au%THRESHOLD_POS%v‚ΜΪ“®—Κ‚ΕΤψ‚«‚ά‚·B
+echo Ϊ“®Τψ‚«—Κ‚π0‚Ι‚µ‚½κ‡AΤψ‚«‚πs‚Ά‚ά‚Ή‚ρB
+echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
+set /P THRESHOLD_POS="΅Ϊ“®ƒL[Τψ‚«—Κ: "
 
-IF /I "%CENTER_DECIMATION_MOVE%" EQU "0" (
+IF /I "%THRESHOLD_POS%" EQU "0" (
     rem -- Τψ‚«‚πs‚ν‚Θ‚Ά
-    set IK_DECIMATION_MOVE=0
-    set DECIMATION_ANGLE=0
-    set ALIGNMENT=1
-    
+    set THRESHOLD_POS=0
+    set THRESHOLD_ROT=0
 
     goto CONFRIM_LOG
 )
 rem -- Τψ‚«‚·‚ι
 
-rem ---  IKΪ“®Τψ‚«—Κ
+rem ---  ‰ρ“]Τψ‚«p“x
 
 echo --------------
-set IK_DECIMATION_MOVE=1.5
-echo IKƒL[‚ΜΤψ‚«‚Ιg—p‚·‚ιΪ“®—Κ‚π”’li¬”‰Βj‚Εw’θ‚µ‚ά‚·
-echo w’θ‚³‚κ‚½”ΝΝ“ΰ‚ΜΪ“®‚ª‚ ‚Α‚½κ‡‚ΙΤψ‚«‚³‚κ‚ά‚·B
-echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡Au%IK_DECIMATION_MOVE%v‚ΜΪ“®—Κ‚ΕΤψ‚«‚ά‚·B
-set /P IK_DECIMATION_MOVE="IKΪ“®Τψ‚«—Κ: "
-
-rem ---  Τψ‚«p“x
-
-echo --------------
-set DECIMATION_ANGLE=10
-echo ‰ρ“]ƒL[‚ΜΤψ‚«‚Ιg—p‚·‚ιp“x‚πw’θ‚µ‚ά‚·
+set THRESHOLD_ROT=3
+echo ‰ρ“]ƒL[‚ΜΤψ‚«‚Ιg—p‚·‚ιp“x(0`180“x‚ά‚Ε¬”‰Β)‚πw’θ‚µ‚ά‚·
 echo w’θ‚³‚κ‚½p“xΘ“ΰ‚Μ‰ρ“]‚ª‚ ‚Α‚½κ‡‚ΙΤψ‚«‚³‚κ‚ά‚·B
-echo -180`180“x‚Μ®”‚Μ‚έ‚π“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
-echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A%DECIMATION_ANGLE%“xΤψ‚«‚ά‚·B
-set /P DECIMATION_ANGLE="Τψ‚«p“x: "
-
-rem ---  Τψ‚«ƒL[‘µ‚¦
-
-echo --------------
-echo Τψ‚Ά‚½ƒL[‚π‘µ‚¦‚ι‚©Ayes ‚© no ‚π“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
-echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡Ayes‚Ζ‚έ‚Θ‚µAΤψ‚Ά‚½ƒL[‚π‘µ‚¦‚ά‚·B
-set ALIGNMENT=1
-set IS_ALIGNMENT=yes
-set /P IS_ALIGNMENT="Τψ‚«ƒL[‘µ‚¦[yes/no]: "
-
-IF /I "%IS_ALIGNMENT%" EQU "no" (
-    set ALIGNMENT=0
-)
+echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A%THRESHOLD_ROT%“xΤψ‚«‚ά‚·B
+echo ,(ƒJƒ“ƒ})‚Ε5‚ά‚Εέ’θ‰Β”\‚Ε‚·B
+set /P THRESHOLD_ROT="΅‰ρ“]ƒL[Τψ‚«p“x: "
 
 
 rem ---  ΪΧƒƒO—L–³
@@ -160,7 +128,7 @@ echo ΪΧ‚ΘƒƒO‚πo‚·‚©Ayes ‚© no ‚π“ό—Ν‚µ‚Δ‰Ί‚³‚ΆB
 echo ‰½‚ΰ“ό—Ν‚Ή‚ΈAENTER‚π‰‰Ί‚µ‚½κ‡A’ΚνƒƒO‚Μ‚έo—Ν‚µ‚ά‚·B
 set VERBOSE=2
 set IS_DEBUG=no
-set /P IS_DEBUG="ΪΧƒƒO[yes/no]: "
+set /P IS_DEBUG="΅ΪΧƒƒO[yes/no]: "
 
 IF /I "%IS_DEBUG%" EQU "yes" (
     set VERBOSE=3
@@ -168,12 +136,14 @@ IF /I "%IS_DEBUG%" EQU "yes" (
 
 rem -----------------------------------------
 
+rem -- ’Ό—§ƒtƒ[ƒ€o—Ν‘ΞΫƒfƒBƒƒNƒgƒ‚ΝA—‘ΞΫƒfƒBƒƒNƒgƒΕ’θ
 set UPRIGHT_TARGET_DIR=
+for /F "tokens=1" %%a in ('echo %TARGET_DIR:,= %') do (
+    set UPRIGHT_TARGET_DIR=%%a
+)
 
 rem -- baseline‰πΝ‹‰ΚƒfƒBƒƒNƒgƒ
 for %%u in (%TARGET_DIR%) do (
-    echo %%u
-
     rem -- ζωΚ’u•β³
     for %%h in (%HEEL_POSITION%) do (
         rem -- ƒZƒ“ƒ^[XYΪ“®”{—¦
@@ -182,24 +152,28 @@ for %%u in (%TARGET_DIR%) do (
             for %%z in (%CENTER_Z_SCALE%) do (
                 rem -- ‚η‚©‚³
                 for %%s in (%SMOOTH_TIMES%) do (
-                    
-                    echo -----------------------------
-                    echo baselineƒfƒBƒƒNƒgƒ: %%u
-                    echo ζωΚ’u•β³: %%h
-                    echo ƒZƒ“ƒ^[XYΪ“®”{—¦: %%x
-                    echo ƒZƒ“ƒ^[ZΪ“®”{—¦: %%z
-                    echo ‚η‚©‚³: %%s
-                    
-                    rem ---  python ΐs
-                    python applications\pos2vmd_multi.py -v %VERBOSE% -t "%%u" -b %MODEL_BONE_CSV% -c %%x -z %%z -x %GROBAL_X_ANGLE% -m %CENTER_DECIMATION_MOVE% -i %IK_DECIMATION_MOVE% -d %DECIMATION_ANGLE% -a %ALIGNMENT% -k %IK_FLAG% -e %%h -s %%s -u "%UPRIGHT_TARGET_DIR%"
+                    rem -- Ϊ“®Τψ‚«—Κ
+                    for %%p in (%THRESHOLD_POS%) do (
+                        rem -- ‰ρ“]Τψ‚«p“x
+                        for %%r in (%THRESHOLD_ROT%) do (
+                            
+                            echo -----------------------------
+                            rem -- echo ’Ό—§’²®ƒfƒBƒƒNƒgƒ: %UPRIGHT_TARGET_DIR%
+                            echo baselineƒfƒBƒƒNƒgƒ: %%u
+                            echo ζωΚ’u•β³: %%h
+                            echo ƒZƒ“ƒ^[XYΪ“®”{—¦: %%x
+                            echo ƒZƒ“ƒ^[ZΪ“®”{—¦: %%z
+                            echo ‰~‰»“x”: %%s
+                            echo Ϊ“®Τψ‚«—Κ: %%p
+                            echo ‰ρ“]Τψ‚«p“x: %%r
+                            
+                            rem ---  python ΐs
+                            python applications\pos2vmd_multi.py -v %VERBOSE% -t "%%u" -b %MODEL_BONE_CSV% -c %%x -z %%z -s %%s -p %%p -r %%r -k %IK_FLAG% -e %%h -u "%UPRIGHT_TARGET_DIR%"
+                        )
+                    )
                 )
             )
         )
-    )
-    
-    if /I "%UPRIGHT_TARGET_DIR%" EQU "" (
-        rem -- ’Ό—§–Άw’θ‚Μκ‡AΕ‰‚Μ’l‚π•Ϋ
-        set UPRIGHT_TARGET_DIR=%%u
     )
 )
 
