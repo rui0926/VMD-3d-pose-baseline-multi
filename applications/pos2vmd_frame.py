@@ -473,10 +473,10 @@ def position_to_frame_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_b
         leg_rotation, knee_rotation = \
             position_to_frame_leg_one_side_calc(frame, pos_gan, QQuaternion(), lower_body_rotation, points, None, direction_name)
 
-        # 体幹がgan採用もしくはオイラー角回転がどれか45度以上の場合、3dpose-gan採用
+        # 体幹がgan採用もしくはオイラー角回転がどれか55度以上の場合、3dpose-gan採用
         if is_gan \
-                or (abs(leg_rotation.toEulerAngles().x()) > 45 or abs(leg_rotation.toEulerAngles().y()) > 45 or abs(leg_rotation.toEulerAngles().z()) > 45 \
-                or abs(knee_rotation.toEulerAngles().x()) > 45 or abs(knee_rotation.toEulerAngles().y()) > 45 or abs(knee_rotation.toEulerAngles().z()) > 45 ):
+                or (abs(leg_rotation.toEulerAngles().x()) > 55 or abs(leg_rotation.toEulerAngles().y()) > 55 or abs(leg_rotation.toEulerAngles().z()) > 55 \
+                or abs(knee_rotation.toEulerAngles().x()) > 55 or abs(knee_rotation.toEulerAngles().y()) > 55 or abs(knee_rotation.toEulerAngles().z()) > 55 ):
             return leg_rotation, knee_rotation
     
     # 3d-pose-baseline のFK
