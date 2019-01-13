@@ -10,7 +10,7 @@ import copy
 
 import pos2vmd_utils
 
-logger = logging.getLogger("pos2vmd_multi").getChild(__name__)
+logger = logging.getLogger("__main__").getChild(__name__)
 
 # 全身で最も直立している姿勢をいくつか返す
 def calc_upright_body(bone_frame_dic):
@@ -283,18 +283,20 @@ def calc_IK(bone_frame_dic, bone_csv_file, smoothed_2d, depth_all_frames, uprigh
 
             # logger.debug("center.y1:{0}".format(bone_frame_dic["センター"][n].position.y()))    
 
-            # センターも一緒にあげる
+            # 足IKを地表にあげる
             left_ankle_pos.setY( left_ankle_pos.y() - ankle_pos_max )
             right_ankle_pos.setY( right_ankle_pos.y() - ankle_pos_max )
+
+            # FIXME センターががくがくする？要調査
             bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() - ankle_pos_max )
             
             # logger.debug("center.y2:{0}".format(bone_frame_dic["センター"][n].position.y()))    
 
             # X回転もさせず、接地させる
-            left_ik_rotation.setX(0)
-            right_ik_rotation.setX(0)
+            left_ik_rotation = QQuaternion.fromEulerAngles(0, left_ik_rotation.toEulerAngles().y(), left_ik_rotation.toEulerAngles().z() )
+            right_ik_rotation = QQuaternion.fromEulerAngles(0, right_ik_rotation.toEulerAngles().y(), right_ik_rotation.toEulerAngles().z() )
 
-        # ジャンプしてる時と浮いてる時の区別がつかないので、一旦保留        
+        # FIXME ジャンプしてる時と浮いてる時の区別がつかないので、一旦保留        
         # if bone_frame_dic["センター"][n].position.y() > 0 \
         #     and left_ankle_pos.y() >= 0 and abs(left_ik_rotation.toEulerAngles().x()) < 20 and abs(left_ik_rotation.toEulerAngles().y()) < 20 and abs(left_ik_rotation.toEulerAngles().z()) < 20 \
         #     and right_ankle_pos.y() >= 0 and abs(right_ik_rotation.toEulerAngles().x()) < 20 and abs(right_ik_rotation.toEulerAngles().y()) < 20 and abs(right_ik_rotation.toEulerAngles().z()) < 20:
@@ -321,14 +323,14 @@ def calc_IK(bone_frame_dic, bone_csv_file, smoothed_2d, depth_all_frames, uprigh
             left_ankle_pos.setY(0)
 
             # X回転もさせず、接地させる
-            left_ik_rotation.setX(0)
+            left_ik_rotation = QQuaternion.fromEulerAngles(0, left_ik_rotation.toEulerAngles().y(), left_ik_rotation.toEulerAngles().z() )
 
         if (right_ankle_pos.y() < 0 and left_ankle_pos.y() >= 0):
             # 右足だけの場合マイナス値は0に補正
             right_ankle_pos.setY(0)
 
             # X回転もさせず、接地させる
-            right_ik_rotation.setX(0)
+            right_ik_rotation = QQuaternion.fromEulerAngles(0, right_ik_rotation.toEulerAngles().y(), right_ik_rotation.toEulerAngles().z() )
 
         # if abs(bone_frame_dic["上半身"][n].rotation.toEulerAngles().y()) < 30 and left_ankle_pos.y() == 0:
         #     # 正面向きでY位置が0の場合、回転させず、接地させる
