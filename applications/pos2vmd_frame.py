@@ -38,7 +38,7 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     bone_frame_dic["下半身"].append(bf)
 
     neck_rotation, head_rotation = \
-        position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan)
+        position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan, slope_motion)
 
     # 首
     bf = VmdBoneFrame(frame)
@@ -181,7 +181,7 @@ LEFT_POINT = {
     'AnotherShoulder': 14
 }
 
-def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan):
+def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan, slope_motion):
     if is_gan: 
         # 体幹が3dpose-ganで決定されている場合
 
@@ -219,6 +219,28 @@ def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body
         initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
         rotation = upper_correctqq * orientation * initial_orientation.inverted()
         head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+
+    # 首の傾きデータ
+    neck_correctqq = QQuaternion()
+    if slope_motion is not None:
+        # Y軸の回転具合を求める
+        y_degree = (180 - abs(neck_rotation.toEulerAngles().y())) / 180
+
+        # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
+        neck_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["首"][0].rotation.toEulerAngles() * y_degree).inverted()
+    
+    neck_rotation = neck_correctqq * neck_rotation
+
+    # 頭の傾きデータ
+    head_correctqq = QQuaternion()
+    if slope_motion is not None:
+        # Y軸の回転具合を求める
+        y_degree = (180 - abs(head_rotation.toEulerAngles().y())) / 180
+
+        # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
+        head_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["頭"][0].rotation.toEulerAngles() * y_degree).inverted()
+    
+    head_rotation = head_correctqq * head_rotation
 
     return neck_rotation, head_rotation
 
