@@ -8,13 +8,118 @@ import re
 import os
 import numpy as np
 
-logger = logging.getLogger("pos2vmd_multi").getChild(__name__)
+from VmdWriter import VmdWriter, VmdInfoIk, VmdShowIkFrame
+from VmdReader import VmdReader, VmdMotion
+
+logger = logging.getLogger("__main__").getChild(__name__)
+
+def output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, vmd_type):
+    writer = VmdWriter()
+    
+    # ディクショナリ型の疑似二次元配列から、一次元配列に変換
+    bone_frames = []
+    for k,v in bone_frame_dic.items():
+        for bf in v:
+            bone_frames.append(bf)
+
+    # vmd出力ファイルにフレーム番号再設定
+    output_vmd_file = vmd_file.replace("[uDDDD]", "u{0:05d}".format(upright_idxs[0]))
+    output_vmd_file = output_vmd_file.replace("[type]", vmd_type)
+
+    # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
+    showik_frames = make_showik_frames(is_ik)
+    writer.write_vmd_file(output_vmd_file, bone_frames, showik_frames)
+
+    return output_vmd_file
+
+# 調整直立情報取得
+def load_upright_target(upright_target):
+
+    target_upright_depth = 0
+    target_upright_idx = 0
+    target_start_pos = {}
+
+    # 初期値
+    target_start_pos["center"] = QVector3D()
+    for key in ["Neck", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle"]:
+        target_start_pos[key] = QVector3D()
+
+    if upright_target is not None:
+        path = upright_target +"/upright.txt"
+        logger.debug("path: %s %s", path, os.path.exists(path))
+        if os.path.exists(path):
+            # 直立調整対象ファイルが存在する場合
+            with open(path, "r") as bf:
+                # 直立IDX
+                target_upright_idx = int(bf.readline())
+
+                # 0Fセンターpos
+                while True:
+                    s_line = bf.readline()
+
+                    if not s_line:
+                        break
+
+                    # 直立の各数値取得
+                    poss = s_line.split(",")
+                    target_start_pos[poss[0]] = QVector3D()
+                    target_start_pos[poss[0]].setX(float(poss[1]))
+                    target_start_pos[poss[0]].setY(float(poss[2]))
+                    target_start_pos[poss[0]].setZ(float(poss[3]))
+            
+    # logger.info("target_start_pos")
+    # logger.info(target_start_pos)
+
+    return target_upright_idx, target_upright_depth, target_start_pos
+
+
+
+# センターY軸をグルーブY軸に移管
+def set_groove(bone_frame_dic, bone_csv_file):
+
+    # グルーブボーンがあるか
+    is_groove = False
+    # ボーンファイルを開く
+    with open(bone_csv_file, "r", encoding=get_file_encoding(bone_csv_file)) as bf:
+        reader = csv.reader(bf)
+
+        for row in reader:
+            if row[1] == "グルーブ" or row[2].lower() == "groove":
+                is_groove = True
+                break
+
+    if is_groove:
+
+        for n in range(len(bone_frame_dic["センター"])):
+            # logger.debug("グルーブ移管 frame={0}".format(n))
+
+            # グルーブがある場合、Y軸をグルーブに設定
+            bone_frame_dic["グルーブ"][n].position = QVector3D(0, bone_frame_dic["センター"][n].position.y(), 0)
+            bone_frame_dic["センター"][n].position = QVector3D(bone_frame_dic["センター"][n].position.x(), 0, bone_frame_dic["センター"][n].position.z())
+
+    return is_groove
+
+
+
+# 初期傾きモーションデータ読み込み
+def load_slope_vmd(is_upper2_body):
+    reader = VmdReader()
+    if is_upper2_body:
+        # 上半身2がある場合
+        return reader.read_vmd_file("slope/slope_upper2.vmd")
+    else:
+        # 標準ボーンのみの場合
+        return reader.read_vmd_file("slope/slope_normal.vmd")
+
+
 
 # 開始フレームを取得
 def load_start_frame(start_frame_file):
     n = 0
     with open(start_frame_file, "r") as sf:
         return int(sf.readline())
+
+
 
 #複数フレームの読み込み
 def read_positions_multi(position_file):
@@ -217,3 +322,17 @@ def calc_triangle_area(a, b, c):
     return abs(( ((a.y() - c.y()) * (b.x() - c.x())) \
                     + ((b.y() - c.y()) * (c.x() - a.x())) ) / 2 )
     
+
+
+def make_showik_frames(is_ik):
+    onoff = 1 if is_ik == True else 0
+
+    frames = []
+    sf = VmdShowIkFrame()
+    sf.show = 1
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x91\xab\x82\x68\x82\x6a', onoff)) # '左足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x91\xab\x82\x68\x82\x6a', onoff)) # '右足ＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x8d\xb6\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', onoff)) # '左つまＩＫ'
+    sf.ik.append(VmdInfoIk(b'\x89\x45\x82\xc2\x82\xdc\x90\xe6\x82\x68\x82\x6a', onoff)) # '右つまＩＫ'
+    frames.append(sf)
+    return frames
