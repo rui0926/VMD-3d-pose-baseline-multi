@@ -7,12 +7,12 @@ import math
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
-def reduce_frames(bone_frame_dic, threshold_pos, threshold_rot):
+def reduce_frames(bone_frame_dic, is_groove, threshold_pos, threshold_rot):
     reduce_bone_frame_dic = {}
 
     for key in bone_frame_dic.keys():
         # logger.debug("key %s", key)
-        if len(bone_frame_dic[key]) > 0:
+        if len(bone_frame_dic[key]) > 0 and ((is_groove == False and key != "グルーブ") or is_groove):
             reduce_bone_frame_dic[key] = reduce_bone_frame(bone_frame_dic[key], 0, len(bone_frame_dic[key]) - 1, threshold_pos, threshold_rot)
 
     return reduce_bone_frame_dic

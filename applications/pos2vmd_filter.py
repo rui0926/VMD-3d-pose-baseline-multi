@@ -9,10 +9,10 @@ import math
 logger = logging.getLogger("__main__").getChild(__name__)
 
 # フィルターをかける
-def smooth_filter(bone_frame_dic, smooth_times):
+def smooth_filter(bone_frame_dic, is_groove, smooth_times):
 
     # まず球形補間
-    smooth_move(bone_frame_dic, smooth_times)
+    smooth_move(bone_frame_dic, is_groove, smooth_times)
     smooth_angle(bone_frame_dic, smooth_times)
     smooth_IK(bone_frame_dic, smooth_times)
     
@@ -32,6 +32,9 @@ def smooth_filter(bone_frame_dic, smooth_times):
 
     for key in bone_frame_dic.keys():
         for n, frame in enumerate(bone_frame_dic[key]):
+            if key == "グルーブ" and is_groove == False:
+                continue
+
             if "ＩＫ" in key:
 
                 # IKの場合、次のフレームと全く同値の場合、フィルタをかけない
@@ -69,14 +72,15 @@ def smooth_filter(bone_frame_dic, smooth_times):
             #     rotation.setZ(rotation.z() * -1)
             #     rotation.setScalar(rotation.scalar() * -1)
             
-            # XYZWそれぞれにフィルターをかける
-            rx = rxfilter(rotation.x(), frame.frame)
-            ry = ryfilter(rotation.y(), frame.frame)
-            rz = rzfilter(rotation.z(), frame.frame)
-            rw = rwfilter(rotation.scalar(), frame.frame)
+            if key != "センター" and key != "グルーブ":
+                # XYZWそれぞれにフィルターをかける
+                rx = rxfilter(rotation.x(), frame.frame)
+                ry = ryfilter(rotation.y(), frame.frame)
+                rz = rzfilter(rotation.z(), frame.frame)
+                rw = rwfilter(rotation.scalar(), frame.frame)
 
-            # 各要素(w, x, y, z)に対し独立に変換をかけているので、正規化しておく
-            frame.rotation = QQuaternion(rw, rx, ry, rz).normalized()
+                # 各要素(w, x, y, z)に対し独立に変換をかけているので、正規化しておく
+                frame.rotation = QQuaternion(rw, rx, ry, rz).normalized()
     
 
 
@@ -110,9 +114,13 @@ def smooth_angle_bone(bone_frame_dic, smooth_times, target_bones):
                         # 角度が違っていたら、球形補正開始
                         prev1_bf.rotation = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5)
 
-def smooth_move(bone_frame_dic, smooth_times):
+def smooth_move(bone_frame_dic, is_groove, smooth_times):
     # センターを滑らかに
-    smooth_move_bone(bone_frame_dic, smooth_times, ["センター", "グルーブ"])
+    if is_groove:
+        smooth_move_bone(bone_frame_dic, smooth_times, ["センター", "グルーブ"])
+    else:
+        smooth_move_bone(bone_frame_dic, smooth_times, ["センター"])
+
 
 def smooth_move_bone(bone_frame_dic, smooth_times, target_bones):
     # 移動の位置円滑化

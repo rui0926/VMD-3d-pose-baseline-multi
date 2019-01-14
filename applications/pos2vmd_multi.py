@@ -141,7 +141,7 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     
     if smooth_times > 0:
         logger.info("円滑化開始")
-        pos2vmd_filter.smooth_filter(bone_frame_dic, smooth_times)
+        pos2vmd_filter.smooth_filter(bone_frame_dic, is_groove, smooth_times)
 
     if threshold_pos == 0 and threshold_rot == 0:
         # FULLキーVMD出力
@@ -151,7 +151,7 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     else:
         # 間引き後キーVMD出力
         logger.info("間引き開始")
-        reduce_bone_frame_dic = pos2vmd_reduce.reduce_frames(bone_frame_dic, threshold_pos, threshold_rot)
+        reduce_bone_frame_dic = pos2vmd_reduce.reduce_frames(bone_frame_dic, is_groove, threshold_pos, threshold_rot)
 
         logger.info("間引き VMD出力開始")
         reduce_vmd_file = pos2vmd_utils.output_vmd(reduce_bone_frame_dic, vmd_file, upright_idxs, is_ik, "reduce")
