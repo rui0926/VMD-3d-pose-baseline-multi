@@ -247,7 +247,7 @@ if __name__ == '__main__':
     suffix = "{0}_h{1}".format(suffix, str(args.heelpos))
     
     # センターXY
-    suffix = "{0}_xy{1}".format(suffix, str(args.centerxy))
+    # suffix = "{0}_xy{1}".format(suffix, str(args.centerxy))
 
     # センターZ        
     suffix = "{0}_z{1}".format(suffix, str(args.centerz))

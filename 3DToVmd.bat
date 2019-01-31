@@ -58,13 +58,13 @@ set /P HEEL_POSITION="■踵位置補正: "
 :CONFIRM_CENTER
 
 rem ---  センターXY移動倍率
-echo --------------
+rem echo --------------
 set CENTER_XY_SCALE=30
-echo センターXY移動に掛ける倍率を整数で入力して下さい。
-echo 値が小さいほど、センターXY移動の幅が小さくなります。
-echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
-echo ,(カンマ)で5件まで設定可能です。
-set /P CENTER_XY_SCALE="■センターXY移動倍率: "
+rem echo センターXY移動に掛ける倍率を整数で入力して下さい。
+rem echo 値が小さいほど、センターXY移動の幅が小さくなります。
+rem echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
+rem echo ,(カンマ)で5件まで設定可能です。
+rem set /P CENTER_XY_SCALE="■センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------

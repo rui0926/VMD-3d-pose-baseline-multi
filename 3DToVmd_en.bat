@@ -58,13 +58,13 @@ set /P HEEL_POSITION="** Heel position correction: "
 :CONFIRM_CENTER
 
 rem ---  センターXY移動倍率
-echo --------------
+rem echo --------------
 set CENTER_XY_SCALE=30
-echo Please enter the multiplication factor for center XY movement as an integer.
-echo The smaller the value, the smaller the width of the center XY movement.
-echo If nothing is entered and ENTER is pressed, processing is performed with the magnification "%CENTER_XY_SCALE%".
-echo You can set up to 5 items by separating them with a comma.
-set /P CENTER_XY_SCALE="** Center XY Magnification: "
+rem echo Please enter the multiplication factor for center XY movement as an integer.
+rem echo The smaller the value, the smaller the width of the center XY movement.
+rem echo If nothing is entered and ENTER is pressed, processing is performed with the magnification "%CENTER_XY_SCALE%".
+rem echo You can set up to 5 items by separating them with a comma.
+rem set /P CENTER_XY_SCALE="** Center XY Magnification: "
 
 rem ---  センターZ移動倍率
 echo --------------
