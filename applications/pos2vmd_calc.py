@@ -369,6 +369,116 @@ def calc_IK(bone_frame_dic, bone_csv_file, smoothed_2d, depth_all_frames, uprigh
     bone_frame_dic["左ひざ"] = []
     bone_frame_dic["右ひざ"] = []
 
+# IK回転の計算
+def calc_IK_rotation(bone_frame_dic, bone_csv_file, positions_multi):
+    logger.debug("bone_csv_file: "+ bone_csv_file)
+
+    # ボーンファイルを開く
+    with open(bone_csv_file, "r", encoding=pos2vmd_utils.get_file_encoding(bone_csv_file)) as bf:
+        reader = csv.reader(bf)
+
+        for row in reader:
+
+            if row[1] == "下半身" or row[2].lower() == "lower body":
+                # 下半身ボーン
+                lower_body_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足" or row[2].lower() == "leg_l":
+                # 左足ボーン
+                left_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左ひざ" or row[2].lower() == "knee_l":
+                # 左ひざボーン
+                left_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足首" or row[2].lower() == "ankle_l":
+                # 左足首ボーン
+                left_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左つま先" or row[2].lower() == "l toe":
+                # 左つま先ボーン
+                left_toes_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足" or row[2].lower() == "leg_r":
+                # 右足ボーン
+                right_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右ひざ" or row[2].lower() == "knee_r":
+                # 右ひざボーン
+                right_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足首" or row[2].lower() == "ankle_r":
+                # 右足首ボーン
+                right_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右つま先" or row[2].lower() == "r toe":
+                # 右つま先ボーン
+                right_toes_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[0] == "Bone" and (row[1] == "左足ＩＫ" or row[2].lower() == "leg ik_l"):
+                # 左足ＩＫボーン
+                left_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[0] == "Bone" and (row[1] == "右足ＩＫ" or row[2].lower() == "leg ik_r"):
+                # 右足ＩＫボーン
+                right_leg_ik_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "センター" or row[2].lower() == "center":
+                # センターボーン
+                center_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+    for n in range(len(bone_frame_dic["左足"])):
+
+        # 左足IK
+        (_, left_ik_rotation, left_leg_diff_rotation) = \
+            calc_IK_matrix(center_bone, lower_body_bone, left_leg_bone, left_knee_bone, left_ankle_bone, left_toes_bone, left_leg_ik_bone \
+                , bone_frame_dic["センター"][n].position \
+                , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["左足"][n].rotation, bone_frame_dic["左ひざ"][n].rotation )
+
+        # positionは、cal_IK_postionで計算した値を使用する
+        left_ankle_pos = bone_frame_dic["左足ＩＫ"][n].position
+
+        # 右足IK
+        (_, right_ik_rotation, right_leg_diff_rotation) = \
+            calc_IK_matrix(center_bone, lower_body_bone, right_leg_bone, right_knee_bone, right_ankle_bone, right_toes_bone, right_leg_ik_bone \
+                , bone_frame_dic["センター"][n].position \
+                , bone_frame_dic["下半身"][n].rotation, bone_frame_dic["右足"][n].rotation, bone_frame_dic["右ひざ"][n].rotation )
+
+        right_ankle_pos = bone_frame_dic["右足ＩＫ"][n].position
+
+        # 足が埋まっている場合 （TODO 足の接地の改善）
+        if left_ankle_pos.y() < 0:
+            left_ankle_pos.setY(0)
+            # 膝が立っている場合
+            if positions_multi[n][5].y() > 3:
+                left_ik_rotation.setX(0)
+        # 足が地面に近い場合
+        elif left_ankle_pos.y() < 1:
+            if positions_multi[n][5].y() > 3:
+                left_ik_rotation.setX(left_ik_rotation.x()*left_ankle_pos.y())
+
+        # 足が埋まっている場合
+        if right_ankle_pos.y() < 0:
+            right_ankle_pos.setY(0)
+             # 膝が立っている場合
+            if positions_multi[n][2].y() > 3:
+                right_ik_rotation.setX(0)
+        # 足が地面に近い場合
+        elif right_ankle_pos.y() < 1:
+            if positions_multi[n][2].y() > 3:
+                right_ik_rotation.setX(right_ik_rotation.x()*right_ankle_pos.y())
+
+        bone_frame_dic["左足ＩＫ"][n].position = left_ankle_pos
+        bone_frame_dic["左足ＩＫ"][n].rotation = left_ik_rotation
+        #bone_frame_dic["左足"][n].rotation = left_leg_diff_rotation
+
+        bone_frame_dic["右足ＩＫ"][n].position = right_ankle_pos
+        bone_frame_dic["右足ＩＫ"][n].rotation = right_ik_rotation
+        #bone_frame_dic["右足"][n].rotation = right_leg_diff_rotation
+
+    #　ひざは登録除去
+    bone_frame_dic["左ひざ"] = []
+    bone_frame_dic["右ひざ"] = []
 
 
 # 行列でIKの位置を求める
@@ -1135,3 +1245,95 @@ def calc_center(bone_frame_dic, smoothed_2d, bone_csv_file, upright_idxs, center
         #     logger.debug(upper_body_qq)
         #     logger.debug(upper_body_qq.toEulerAngles())
         #     logger.debug(upper_body_qq.toVector4D())
+
+
+# センターと足IKの位置をpos.txtデータから計算
+def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, heelpos, is_ik):
+    # ボーンファイルを開く
+    with open(bone_csv_file, "r",  encoding=pos2vmd_utils.get_file_encoding(bone_csv_file)) as bf:
+        reader = csv.reader(bf)
+
+        for row in reader:
+
+            if row[1] == "左足" or row[2].lower() == "leg_l":
+                # 左足ボーン
+                left_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左ひざ" or row[2].lower() == "knee_l":
+                # 左ひざボーン
+                left_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "左足首" or row[2].lower() == "ankle_l":
+                # 左足首ボーン
+                left_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足" or row[2].lower() == "leg_r":
+                # 右足ボーン
+                right_leg_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右ひざ" or row[2].lower() == "knee_r":
+                # 右ひざボーン
+                right_knee_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+            if row[1] == "右足首" or row[2].lower() == "ankle_r":
+                # 右足首ボーン
+                right_ankle_bone = QVector3D(float(row[5]), float(row[6]), float(row[7]))
+
+    # MMD上の両足の長さ（RHip-RKnee-RAnkle, LHip-LKnee-LAnkle）を計算
+    mmd_leg_length = (right_ankle_bone-right_knee_bone).length() + (right_knee_bone-right_leg_bone).length() \
+                   + (left_ankle_bone-left_knee_bone).length() + (left_knee_bone-left_leg_bone).length()
+
+    base_leg_length = []
+    for frame, positions in enumerate(positions_multi):
+        # 3dBaseLineでの足の長さ合計（RHip-RKnee-RAnkle, LHip-LKnee-LAnkle）を計算
+        base_leg_length.append( (positions[3] - positions[2]).length() + (positions[2] - positions[1]).length()
+                                + (positions[6] - positions[5]).length() + (positions[5] - positions[4]).length()
+                              )
+    # 前後の計91フレームで移動平均をとる
+    move_ave_base_leg_length = calc_move_average(base_leg_length, 91)
+
+    # pos.txtのyは接地時の足首の位置を0としているため、その分のバイアス
+    bias_y = (left_ankle_bone + right_ankle_bone)/2
+
+    for frame, positions in enumerate(positions_multi):
+        base_leg = move_ave_base_leg_length[frame]
+        if base_leg == 0:
+            base_leg = 1000 # error 対策
+        # MMD上の足の長さと3dBaseLine上の足の長さの比率
+        scale_mmd_base = mmd_leg_length/base_leg
+
+        # センターIK
+        hip_mmd = bias_y + scale_mmd_base * positions[0]
+        hip_mmd_diff = hip_mmd - (left_leg_bone + right_leg_bone)/2
+        # 踵補正を入れて設定する
+        heelpos_common = -0.2 # 0.2沈める
+        hip_mmd_diff.setY(hip_mmd_diff.y() + heelpos_common + heelpos)
+        bone_frame_dic["センター"][frame].position = hip_mmd_diff
+
+        if is_ik:
+            # 右足IK
+            right_ankle_mmd = bias_y + scale_mmd_base * positions[3]
+            right_ankle_mmd_diff = right_ankle_mmd - right_ankle_bone
+            # 踵補正を入れて設定する
+            right_ankle_mmd_diff.setY(right_ankle_mmd_diff.y() + heelpos_common + heelpos)
+            bone_frame_dic["右足ＩＫ"][frame].position = right_ankle_mmd_diff
+
+            # 左足IK
+            left_ankle_mmd = bias_y + scale_mmd_base * positions[6]
+            left_ankle_mmd_diff = left_ankle_mmd - left_ankle_bone
+            # 踵補正を入れて設定する
+            left_ankle_mmd_diff.setY(left_ankle_mmd_diff.y() + heelpos_common + heelpos)
+            bone_frame_dic["左足ＩＫ"][frame].position = left_ankle_mmd_diff
+
+def calc_move_average(data, n):
+    if len(data) > n:
+        move_avg = np.convolve(data, np.ones(n)/n, 'valid')
+        # 移動平均でデータ数が減るため、前と後ろに同じ値を繰り返しで補填する
+        fore_n = int((n - 1)/2)
+        back_n = n - 1 - fore_n
+        result = np.hstack((np.tile([move_avg[0]], fore_n), move_avg, np.tile([move_avg[-1]], back_n)))
+    else:
+        avg = mean(data)
+        result = np.tile([avg], len(data))
+
+    return result
