@@ -68,7 +68,10 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     logger.info("傾きモーション読み込み開始")
 
     # 傾きを読み込み
-    slope_motion = pos2vmd_utils.load_slope_vmd(is_upper2_body)
+    # slope_motion = pos2vmd_utils.load_slope_vmd(is_upper2_body)
+
+    # Baseline側で前傾補正している前提でVMD側では前傾補正しない
+    slope_motion = None
 
     logger.info("角度計算開始")
 
