@@ -6,16 +6,16 @@ rem ---
 rem ---  Change the current directory to the execution destination
 cd /d %~dp0
 
-rem ---  3d-pose-baseline-vmd Analysis result JSON directory path
-echo Please enter the absolute path of the analysis result directory of 3d-pose-baseline-vmd.(3d_{yyyymmdd_hhmmss}_idx00)
-echo This setting is available only for half size alphanumeric characters, it is a required item.
-echo You can set up to 5 items by separating them with a comma.
+rem ---  Individual directory path
+echo Please enter the full path of individual index directory.({Movie name}_json_{Execution date and time}_idx00)
+echo There is a directory such as pos.txt.
+echo This setting is available only in Half - width alphanumeric characters and is mandatory.
 set TARGET_DIR=
-set /P TARGET_DIR=** 3d-pose-baseline-vmd Analysis result directory path: 
+set /P TARGET_DIR=** Individual directory path: 
 rem echo TARGET_DIR：%TARGET_DIR%
 
 IF /I "%TARGET_DIR%" EQU "" (
-    ECHO 3D analysis result directory path is not set, processing will be interrupted.
+    ECHO Since the individual directory path of the index is not set, processing is interrupted.
     EXIT /B
 )
 
@@ -68,7 +68,7 @@ rem set /P CENTER_XY_SCALE="** Center XY Magnification: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=2
+set CENTER_Z_SCALE=5
 echo Please enter the magnification multiplied by the center Z movement with a numerical value (decimal possible).
 echo The smaller the value, the smaller the width of the center Z movement.
 echo As a guide, it is better to reduce the magnification as the distance from the camera is shorter.

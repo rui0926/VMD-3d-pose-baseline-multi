@@ -67,11 +67,11 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
 
     logger.info("傾きモーション読み込み開始")
 
-    # 傾きを読み込み
-    # slope_motion = pos2vmd_utils.load_slope_vmd(is_upper2_body)
+    # 傾きをひじ用読み込み
+    slope_motion = pos2vmd_utils.load_slope_vmd(is_upper2_body)
 
-    # Baseline側で前傾補正している前提でVMD側では前傾補正しない
-    slope_motion = None
+    # # Baseline側で前傾補正している前提でVMD側では前傾補正しない
+    # slope_motion = None
 
     logger.info("角度計算開始")
 
@@ -99,17 +99,16 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     # pos2vmd_calc.calc_center(bone_frame_dic, smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos, target_upright_idx, target_start_pos)
 
     # センターと足のIKポジションの計算
-    pos2vmd_calc.calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, heelpos, is_ik)
+    pos2vmd_calc.calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoothed_2d, heelpos, is_ik)
 
     depths = pos2vmd_utils.load_depth(depth_file)
 
-    depth_all_frames = None
     if depths is not None:
         # 深度ファイルがある場合のみ、Z軸計算
         logger.info("センターZ計算開始")
 
         # センターZの計算
-        depth_all_frames = pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth)
+        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth, is_ik)
 
     logger.info("IK計算開始")
 
@@ -147,7 +146,7 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
 
     # グルーブ移管
     is_groove = pos2vmd_utils.set_groove(bone_frame_dic, bone_csv_file)
-    
+
     if smooth_times > 0:
         logger.info("円滑化開始")
         pos2vmd_filter.smooth_filter(bone_frame_dic, is_groove, smooth_times)
