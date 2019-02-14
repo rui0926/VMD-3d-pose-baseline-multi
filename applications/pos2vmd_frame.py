@@ -6,6 +6,7 @@ import logging
 
 from VmdWriter import VmdBoneFrame
 from VmdReader import VmdReader, VmdMotion
+import math
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
@@ -36,6 +37,11 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     bf.name = b'\x89\xba\x94\xbc\x90\x67' # '下半身'
     bf.rotation = lower_body_rotation
     bone_frame_dic["下半身"].append(bf)
+
+    # 頭の方向の安定化のためNeck/NoseとHeadを20mm前へ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
+    up = QVector3D.crossProduct((pos[0] - pos[14]), (pos[14] - pos[11])).normalized()
+    pos[9] += up * 20
+    pos[10] += up * 20
 
     neck_rotation, head_rotation = \
         position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan, slope_motion)
@@ -110,6 +116,24 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     left_leg_rotation, left_knee_rotation = \
         position_to_frame_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, LEFT_POINT, ["左足", "左ひざ"], is_gan, slope_motion, "左")
 
+    # 膝がまっすぐのときつま先が不自然に回転することがあり、対策のため膝を20mmから100mm前へ移動する
+    leg_v = left_leg_rotation.toVector4D()
+    leg_x = leg_v.x()
+    leg_y = leg_v.y()
+    leg_z = leg_v.z()
+    leg_w = leg_v.w()
+    m20 = 2.0 * leg_x * leg_z + 2.0 * leg_w * leg_y
+    m22 = 1.0 - 2.0 * leg_x * leg_x - 2.0 * leg_y * leg_y
+    ty = -math.degrees(math.atan2(m20, m22)) # 左脚の角度y
+    # RHip, LHip, LFootでできる平面の垂直方向へ移動
+    up = QVector3D.crossProduct((pos[6] - pos[4]), (pos[4] - pos[1])).normalized()
+    # 左足の回転が大きいほど膝の移動量を増やす(20mmから100mm)
+    pos[5] -= up * (20 + 80 * abs(ty) / 180.0)
+
+    # 左足と左ひざの回転の再計算
+    left_leg_rotation, left_knee_rotation = \
+        position_to_frame_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, LEFT_POINT, ["左足", "左ひざ"], is_gan, slope_motion, "左")
+
     # 左足
     bf = VmdBoneFrame(frame)
     bf.name = b'\x8d\xb6\x91\xab' # '左足'
@@ -123,6 +147,25 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     bone_frame_dic["左ひざ"].append(bf)
 
     # 右足と右ひざの回転
+    right_leg_rotation, right_knee_rotation = \
+        position_to_frame_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, RIGHT_POINT, ["右足", "右ひざ"], is_gan, slope_motion, "右")
+
+    # 膝がまっすぐのときつま先が不自然に回転することがあり、対策のため膝を20mmから100mm前へ移動する
+    leg_v = right_leg_rotation.toVector4D()
+    leg_x = leg_v.x()
+    leg_y = leg_v.y()
+    leg_z = leg_v.z()
+    leg_w = leg_v.w()
+    m20 = 2.0 * leg_x * leg_z + 2.0 * leg_w * leg_y
+    m22 = 1.0 - 2.0 * leg_x * leg_x - 2.0 * leg_y * leg_y
+    # 右足の角度y
+    ty = -math.degrees(math.atan2(m20, m22))
+    # LHip, RHip, RFootでできる平面の垂直方向へ移動
+    up = QVector3D.crossProduct((pos[3] - pos[1]), (pos[1] - pos[4])).normalized()
+    # 右足の回転が大きいほど膝の移動量を増やす(20mmから100mm)
+    pos[2] += up * (20 + 80 * abs(ty) / 180.0)
+
+    # 右足と右ひざの回転の再計算
     right_leg_rotation, right_knee_rotation = \
         position_to_frame_leg_one_side(frame, pos, pos_gan, lower_correctqq, lower_body_rotation, RIGHT_POINT, ["右足", "右ひざ"], is_gan, slope_motion, "右")
 

@@ -6,16 +6,17 @@ rem ---
 rem ---  カレントディレクトリを実行先に変更
 cd /d %~dp0
 
-rem ---  3d-pose-baseline-vmd解析結果JSONディレクトリパス
-echo 3d-pose-baseline-vmdの解析結果ディレクトリの絶対パスを入力して下さい。(3d_{実行日時}_idx00)
+rem ---  INDEX別ディレクトリパス
+echo INDEX別ディレクトリのフルパスを入力して下さい。({動画名}_json_{実行日時}_idx00)
+echo pos.txtなどのあるディレクトリです。
 echo この設定は半角英数字のみ設定可能で、必須項目です。
 echo ,(カンマ)で5件まで設定可能です。
 set TARGET_DIR=
-set /P TARGET_DIR=■3d-pose-baseline-vmd 解析結果ディレクトリパス: 
+set /P TARGET_DIR=■INDEX別ディレクトリパス: 
 rem echo TARGET_DIR：%TARGET_DIR%
 
 IF /I "%TARGET_DIR%" EQU "" (
-    ECHO 3D解析結果ディレクトリパスが設定されていないため、処理を中断します。
+    ECHO INDEX別ディレクトリパスが設定されていないため、処理を中断します。
     EXIT /B
 )
 
@@ -58,17 +59,17 @@ set /P HEEL_POSITION="■踵位置補正: "
 :CONFIRM_CENTER
 
 rem ---  センターXY移動倍率
-echo --------------
+rem echo --------------
 set CENTER_XY_SCALE=30
-echo センターXY移動に掛ける倍率を整数で入力して下さい。
-echo 値が小さいほど、センターXY移動の幅が小さくなります。
-echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
-echo ,(カンマ)で5件まで設定可能です。
-set /P CENTER_XY_SCALE="■センターXY移動倍率: "
+rem echo センターXY移動に掛ける倍率を整数で入力して下さい。
+rem echo 値が小さいほど、センターXY移動の幅が小さくなります。
+rem echo 何も入力せず、ENTERを押下した場合、倍率「%CENTER_XY_SCALE%」で処理します。
+rem echo ,(カンマ)で5件まで設定可能です。
+rem set /P CENTER_XY_SCALE="■センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=2
+set CENTER_Z_SCALE=5
 echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。

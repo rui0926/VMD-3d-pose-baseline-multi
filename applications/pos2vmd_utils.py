@@ -151,9 +151,24 @@ def read_positions_multi(position_file):
 
 DEPTH_INDEX = {
     "index": 0,
-    "Wrist": 1,
-    "RAnkle": 2,
-    "LAnkle": 3
+    "Nose": 1,
+    "Neck": 2,
+    "RShoulder": 3,
+    "RElbow": 4,
+    "RWrist": 5,
+    "LShoulder": 6,
+    "LElbow": 7,
+    "LWrist": 8,
+    "RHip": 9,
+    "RKnee": 10,
+    "RAnkle": 11,
+    "LHip": 12,
+    "LKnee": 13,
+    "LAnkle": 14,
+    "REye": 15,
+    "LEye": 16,
+    "REar": 17,
+    "LEar": 18
 }
 
 # depthファイルの読み込み
@@ -161,7 +176,7 @@ def load_depth(depth_file):
     if os.path.exists(depth_file) == False:
         return None
 
-    depths = [[0 for i in range(4)] for j in range(sum(1 for line in open(depth_file)))]
+    depths = [[0 for i in range(len(DEPTH_INDEX))] for j in range(sum(1 for line in open(depth_file)))]
 
     n = 0
     # 深度ファイルからフレームINDEXを取得する
@@ -170,11 +185,26 @@ def load_depth(depth_file):
         reader = csv.reader(bf)
 
         for row in reader:
-            logger.debug("row[0] {0}, row[1]: {1}, row[2]: {2}, row[3]: {3}".format(row[0], row[1], row[2], row[3]))
+            # logger.debug("row[0] {0}, row[1]: {1}, row[2]: {2}, row[3]: {3}".format(row[0], row[1], row[2], row[3]))
             depths[n][DEPTH_INDEX["index"]] = int(row[0])
-            depths[n][DEPTH_INDEX["Wrist"]] = float(row[1])
-            depths[n][DEPTH_INDEX["RAnkle"]] = float(row[2])
-            depths[n][DEPTH_INDEX["LAnkle"]] = float(row[3])
+            depths[n][DEPTH_INDEX["Nose"]] = float(row[1])
+            depths[n][DEPTH_INDEX["Neck"]] = float(row[2])
+            depths[n][DEPTH_INDEX["RShoulder"]] = float(row[3])
+            depths[n][DEPTH_INDEX["RElbow"]] = float(row[4])
+            depths[n][DEPTH_INDEX["RWrist"]] = float(row[5])
+            depths[n][DEPTH_INDEX["LShoulder"]] = float(row[6])
+            depths[n][DEPTH_INDEX["LElbow"]] = float(row[7])
+            depths[n][DEPTH_INDEX["LWrist"]] = float(row[8])
+            depths[n][DEPTH_INDEX["RHip"]] = float(row[9])
+            depths[n][DEPTH_INDEX["RKnee"]] = float(row[10])
+            depths[n][DEPTH_INDEX["RAnkle"]] = float(row[11])
+            depths[n][DEPTH_INDEX["LHip"]] = float(row[12])
+            depths[n][DEPTH_INDEX["LKnee"]] = float(row[13])
+            depths[n][DEPTH_INDEX["LAnkle"]] = float(row[14])
+            depths[n][DEPTH_INDEX["REye"]] = float(row[15])
+            depths[n][DEPTH_INDEX["LEye"]] = float(row[16])
+            depths[n][DEPTH_INDEX["REar"]] = float(row[17])
+            depths[n][DEPTH_INDEX["LEar"]] = float(row[18])
         
             n += 1
 
