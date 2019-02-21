@@ -1423,7 +1423,7 @@ def calc_move_average(data, n):
         back_n = n - 1 - fore_n
         result = np.hstack((np.tile([move_avg[0]], fore_n), move_avg, np.tile([move_avg[-1]], back_n)))
     else:
-        avg = mean(data)
+        avg = np.mean(data)
         result = np.tile([avg], len(data))
 
     return result
