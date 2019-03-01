@@ -358,7 +358,7 @@ def position_to_frame_upper_calc(frame, pos, is_upper2_body, slope_motion):
 
         # 傾きデータがある場合、補正をかける
         if slope_motion is not None:
-            # Y軸の回転具合を求める
+            # # Y軸の回転具合を求める
             y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
 
             # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
@@ -378,13 +378,13 @@ def position_to_frame_upper_calc(frame, pos, is_upper2_body, slope_motion):
 
         # 傾きデータがある場合、補正をかける
         if slope_motion is not None:
-            # Y軸の回転具合を求める
+            # # Y軸の回転具合を求める
             y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
 
             # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
             upper_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["上半身2"][0].rotation.toEulerAngles() * y_degree).inverted()
 
-        upper_body_rotation2 = upper_correctqq * upper_body_rotation1.inverted() * upper_body_rotation2
+        upper_body_rotation2 = upper_body_rotation1.inverted() * upper_correctqq * upper_body_rotation2
         
     else:
         # 上半身2は初期クォータニオン
@@ -403,7 +403,7 @@ def position_to_frame_upper_calc(frame, pos, is_upper2_body, slope_motion):
         
         # 傾きデータがある場合、補正をかける
         if slope_motion is not None:
-            # Y軸の回転具合を求める
+            # # Y軸の回転具合を求める
             y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
 
             # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
@@ -454,55 +454,56 @@ def position_to_frame_shoulder_one_side_calc(frame, pos, upper_correctqq, upper_
     direction = pos[points['Shoulder']] - pos[points['Thorax']]
     up = QVector3D.crossProduct((pos[points['Shoulder']] - pos[points['Thorax']]), (pos[points['AnotherShoulder']] - pos[points['Shoulder']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    rotation = upper_correctqq * orientation * shoulder_initial_orientation.inverted()
+    rotation = orientation * shoulder_initial_orientation.inverted()
 
     # 肩の傾きデータ
     shoulder_correctqq = QQuaternion()
     if slope_motion is not None:
-        # Y軸の回転具合を求める
-        y_degree = (180 - abs(rotation.toEulerAngles().y())) / 180
+        # # Y軸の回転具合を求める
+        y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
 
         # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
         shoulder_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["{0}肩".format(direction_name)][0].rotation.toEulerAngles() * y_degree).inverted()
 
     # 肩ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    shoulder_rotation = shoulder_correctqq * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation # 後で使うので保存しておく
+    shoulder_rotation = upper_correctqq * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * shoulder_correctqq * rotation # 後で使うので保存しておく
     
     # 腕
     direction = pos[points['Elbow']] - pos[points['Shoulder']]
     up = QVector3D.crossProduct((pos[points['Elbow']] - pos[points['Shoulder']]), (pos[points['Wrist']] - pos[points['Elbow']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    rotation = upper_correctqq * orientation * arm_initial_orientation.inverted()
+    rotation = orientation * arm_initial_orientation.inverted()
 
     # 腕の傾きデータ
     arm_correctqq = QQuaternion()
     if slope_motion is not None:
-        # Y軸の回転具合を求める
-        y_degree = (180 - abs(rotation.toEulerAngles().y())) / 180
+        # # Y軸の回転具合を求める
+        y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
 
         # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
         arm_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["{0}腕".format(direction_name)][0].rotation.toEulerAngles() * y_degree).inverted()
 
     # 腕ポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
-    arm_rotation = arm_correctqq * shoulder_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation # 後で使うので保存しておく
+    arm_rotation = shoulder_correctqq * shoulder_rotation.inverted() * upper_correctqq * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * arm_correctqq * rotation # 後で使うので保存しておく
     
     # ひじ
     direction = pos[points['Wrist']] - pos[points['Elbow']]
     up = QVector3D.crossProduct((pos[points['Elbow']] - pos[points['Shoulder']]), (pos[points['Wrist']] - pos[points['Elbow']]))
     orientation = QQuaternion.fromDirection(direction, up)
-    rotation = upper_correctqq * orientation * arm_initial_orientation.inverted()
+    rotation = orientation * arm_initial_orientation.inverted()
 
     # ひじの傾きデータ
     elbow_correctqq = QQuaternion()
     if slope_motion is not None:
-        # Y軸の回転具合を求める
-        y_degree = (180 - abs(rotation.toEulerAngles().y())) / 180
-       
+        # # Y軸の回転具合を求める
+        y_degree = (180 - abs(upper_body_rotation1.toEulerAngles().y())) / 180
+
+        # 一旦オイラー角に変換して、角度のかかり具合を補正し、再度クォータニオンに変換する
         elbow_correctqq = QQuaternion.fromEulerAngles(slope_motion.frames["{0}ひじ".format(direction_name)][0].rotation.toEulerAngles() * y_degree).inverted()
 
     # ひじポーンの回転から親ボーンの回転を差し引いてbf.rotationに格納する。
     # upper_body_rotation * left_shoulder_rotation * left_arm_rotation * bf.rotation = rotation なので、
-    elbow_rotation = elbow_correctqq * arm_rotation.inverted() * shoulder_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
+    elbow_rotation = arm_correctqq * arm_rotation.inverted() * shoulder_correctqq * shoulder_rotation.inverted() * upper_correctqq * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * elbow_correctqq * rotation
     # bf.rotation = (upper_body_rotation * left_arm_rotation).inverted() * rotation # 別の表現
     
     return shoulder_rotation, arm_rotation, elbow_rotation
