@@ -55,6 +55,9 @@ bone_frame_dic = {
 
 # 関節位置情報のリストからVMDを生成します
 def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, upright_target):
+    # トレースモデル
+    logger.info("トレースモデル: %s", bone_csv_file)
+
     # 開始フレームインデックス
     start_frame = pos2vmd_utils.load_start_frame(start_frame_file)
     logger.info("開始フレームインデックス: %d", start_frame)
