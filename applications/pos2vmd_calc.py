@@ -1347,6 +1347,11 @@ def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoo
     mmd_leg_length = (right_ankle_bone-right_knee_bone).length() + (right_knee_bone-right_leg_bone).length() \
                    + (left_ankle_bone-left_knee_bone).length() + (left_knee_bone-left_leg_bone).length()
 
+    # 左右方向のmmdとbaselineのスケール比率は、固定値とする
+    scale_mmd_base_const = 18.83 / 1743 # = ミクさんの両足の長さ(18.83ミクセル:1506mm)/教師データの両足の長さ平均(1743mm)
+
+    # 上下方向のスケール比率は、pos.txtの足の長さに合わせて変動値とする
+    # pos.txtの両足の長さ（RHip-RKnee-RAnkle, LHip-LKnee-LAnkle）
     base_leg_length = []
     for frame, positions in enumerate(positions_multi):
         # 3dBaseLineでの足の長さ合計（RHip-RKnee-RAnkle, LHip-LKnee-LAnkle）を計算
@@ -1355,6 +1360,9 @@ def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoo
                               )
     # 前後の計91フレームで移動平均をとる
     move_ave_base_leg_length = calc_move_average(base_leg_length, 91)
+
+    # 平均 
+    ave_base_leg_length = np.mean(base_leg_length)
 
     # pos.txtのyは接地時の足首の位置を0としているため、その分のバイアス
     bias_y = (left_ankle_bone + right_ankle_bone)/2
@@ -1365,13 +1373,21 @@ def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoo
 
     for frame, positions in enumerate(positions_multi):
         base_leg = move_ave_base_leg_length[frame]
-        if base_leg == 0:
-            base_leg = 1000 # error 対策
+        # pos.txtの足の長さが正しく取れない時のため、上限、下限を設ける
+        if base_leg < ave_base_leg_length * 0.9:
+            base_leg = ave_base_leg_length * 0.9
+        if base_leg > ave_base_leg_length * 1.1:
+            base_leg = ave_base_leg_length * 1.1
+
         # MMD上の足の長さと3dBaseLine上の足の長さの比率
         scale_mmd_base = mmd_leg_length/base_leg
 
         # センターIK
-        hip_mmd = bias_y + scale_mmd_base * positions[0]
+        hip_pos = QVector3D(scale_mmd_base_const * positions[0].x(),
+                            scale_mmd_base * positions[0].y(),
+                            scale_mmd_base_const * positions[0].z()
+                        )
+        hip_mmd = bias_y + hip_pos
         hip_mmd_diff = hip_mmd - (left_leg_bone + right_leg_bone)/2
         # 踵補正を入れて設定する
         heelpos_common = -0.2 # 0.2沈める
@@ -1380,13 +1396,21 @@ def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoo
 
         if is_ik:
             # 右足IK
-            right_ankle_mmd = bias_y + scale_mmd_base * positions[3]
+            right_ankle_pos = QVector3D(scale_mmd_base_const * positions[3].x(),
+                                        scale_mmd_base * positions[3].y(),
+                                        scale_mmd_base_const * positions[3].z()
+                                )
+            right_ankle_mmd = bias_y + right_ankle_pos
             right_ankle_mmd_diff = right_ankle_mmd - right_ankle_bone
             # 踵補正を入れて設定する
             right_ankle_mmd_diff.setY(right_ankle_mmd_diff.y() + heelpos_common + heelpos)
 
             # 左足IK
-            left_ankle_mmd = bias_y + scale_mmd_base * positions[6]
+            left_ankle_pos = QVector3D(scale_mmd_base_const * positions[6].x(),
+                                        scale_mmd_base * positions[6].y(),
+                                        scale_mmd_base_const * positions[6].z()
+                                )
+            left_ankle_mmd = bias_y + left_ankle_pos
             left_ankle_mmd_diff = left_ankle_mmd - left_ankle_bone
             # 踵補正を入れて設定する
             left_ankle_mmd_diff.setY(left_ankle_mmd_diff.y() + heelpos_common + heelpos)
