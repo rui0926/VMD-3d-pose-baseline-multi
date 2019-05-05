@@ -68,7 +68,7 @@ rem set /P CENTER_XY_SCALE="** Center XY Magnification: "
 
 rem ---  ÉZÉìÉ^Å[Zà⁄ìÆî{ó¶
 echo --------------
-set CENTER_Z_SCALE=5
+set CENTER_Z_SCALE=0
 echo Please enter the magnification multiplied by the center Z movement with a numerical value (decimal possible).
 echo The smaller the value, the smaller the width of the center Z movement.
 echo As a guide, it is better to reduce the magnification as the distance from the camera is shorter.
