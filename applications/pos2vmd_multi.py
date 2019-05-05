@@ -68,7 +68,7 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     # 上半身2があるかチェック
     is_upper2_body = pos2vmd_utils.is_upper2_body_bone(bone_csv_file)
 
-    logger.info("傾きモーション読み込み開始")
+    logger.info("傾きモーション読み込み開始 上半身2: %s", is_upper2_body)
 
     # 傾きをひじ用読み込み
     slope_motion = pos2vmd_utils.load_slope_vmd(is_upper2_body)
@@ -101,19 +101,10 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     # センターの計算
     # pos2vmd_calc.calc_center(bone_frame_dic, smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos, target_upright_idx, target_start_pos)
 
+    logger.info("IK計算開始")
+
     # センターと足のIKポジションの計算
     pos2vmd_calc.calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoothed_2d, heelpos, is_ik)
-
-    depths = pos2vmd_utils.load_depth(depth_file)
-
-    if depths is not None:
-        # 深度ファイルがある場合のみ、Z軸計算
-        logger.info("センターZ計算開始")
-
-        # センターZの計算
-        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth, is_ik)
-
-    logger.info("IK計算開始")
 
     if is_ik:
         # IKの計算
@@ -125,6 +116,15 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
         #　IKでない場合は登録除去
         bone_frame_dic["左足ＩＫ"] = []
         bone_frame_dic["右足ＩＫ"] = []
+
+    depths = pos2vmd_utils.load_depth(depth_file)
+
+    if depths is not None and center_z_scale > 0:
+        # 深度ファイルがあり、スケールが指定されている場合のみ、Z軸計算
+        logger.info("センターZ計算開始")
+
+        # センターZの計算
+        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth, is_ik)
 
     # 直立関連ファイルに情報出力
     # 直立IDX
@@ -145,10 +145,11 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
 
     upright_file.close()
 
-    logger.info("グルーブ移管開始")
-
     # グルーブ移管
     is_groove = pos2vmd_utils.set_groove(bone_frame_dic, bone_csv_file)
+
+    if is_groove:
+        logger.info("グルーブ移管")
 
     if smooth_times > 0:
         logger.info("円滑化開始")
@@ -236,9 +237,14 @@ if __name__ == '__main__':
     position_gan_file = base_dir + "/pos_gan.txt"
 
     suffix = ""
-    if os.path.exists(position_gan_file) == False:
-        suffix = "_ganなし"
+
+    # ganは使用しない
+    # if os.path.exists(position_gan_file) == False:
+    #     suffix = "_ganなし"
     
+    # ボーンCSVファイル名・拡張子
+    bone_filename, bone_fileext = os.path.splitext(os.path.basename(args.bone))
+
     if os.path.exists(depth_file) == False:
         suffix = "{0}_depthなし".format(suffix)
     
@@ -263,7 +269,7 @@ if __name__ == '__main__':
     # 回転間引き
     suffix = "{0}_r{1}".format(suffix, str(args.threshold_rot))
     
-    vmd_file = "{0}/output_{1:%Y%m%d_%H%M%S}_[uDDDD]{2}_[type].vmd".format(base_dir, datetime.datetime.now(), suffix)
+    vmd_file = "{0}/{3}_{1:%Y%m%d_%H%M%S}{2}_[type].vmd".format(base_dir, datetime.datetime.now(), suffix, bone_filename)
 
     #直立インデックスファイル
     upright_file = open("{0}/upright.txt".format(base_dir), 'w')

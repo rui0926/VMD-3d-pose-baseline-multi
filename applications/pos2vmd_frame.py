@@ -15,6 +15,10 @@ logger = logging.getLogger("__main__").getChild(__name__)
 def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper2_body, slope_motion):
     logger.debug("角度計算 frame={0}".format(str(frame)))
 
+    # 上半身の方向の安定化のため脊椎を20mm後ろへ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
+    up = QVector3D.crossProduct((pos[0] - pos[14]), (pos[14] - pos[11])).normalized()
+    pos[7] += up * 20
+
     # 体幹の回転
     upper_body_rotation1, upper_body_rotation2, upper_correctqq, lower_body_rotation, lower_correctqq, is_gan \
         = position_to_frame_trunk(bone_frame_dic, frame, pos, pos_gan, is_upper2_body, slope_motion)
@@ -38,10 +42,10 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     bf.rotation = lower_body_rotation
     bone_frame_dic["下半身"].append(bf)
 
-    # 頭の方向の安定化のためNeck/NoseとHeadを20mm前へ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
+    # 頭の方向の安定化のためNeck/NoseとHeadを500mm後ろへ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
     up = QVector3D.crossProduct((pos[0] - pos[14]), (pos[14] - pos[11])).normalized()
-    pos[9] += up * 20
-    pos[10] += up * 20
+    pos[9] += up * 500
+    pos[10] += up * 500
 
     neck_rotation, head_rotation = \
         position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan, slope_motion)
