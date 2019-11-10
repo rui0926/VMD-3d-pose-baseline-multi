@@ -7,9 +7,9 @@ import logging
 import argparse
 import glob
 
-from VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
-from VmdReader import VmdMotion, VmdReader
-import pos2vmd_utils
+from applications.VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
+from applications.VmdReader import VmdMotion, VmdReader
+from applications import pos2vmd_utils
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)

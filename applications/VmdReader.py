@@ -6,7 +6,7 @@ import logging
 import re
 import numpy as np
 from PyQt5.QtGui import QQuaternion, QVector3D
-from VmdWriter import VmdBoneFrame
+from applications.VmdWriter import VmdBoneFrame
 
 logger = logging.getLogger("__main__").getChild(__name__)
 

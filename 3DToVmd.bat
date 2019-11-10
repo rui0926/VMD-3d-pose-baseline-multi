@@ -69,7 +69,7 @@ rem set /P CENTER_XY_SCALE="■センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=0
+set CENTER_Z_SCALE=2
 echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
@@ -81,7 +81,7 @@ set /P CENTER_Z_SCALE="■センターZ移動倍率: "
 rem ---  滑らかさ
 
 echo --------------
-set SMOOTH_TIMES=1
+set SMOOTH_TIMES=2
 echo モーションの円滑化の度数を指定します
 echo 1以上の整数のみを入力して下さい。
 echo 度数が大きいほど、円滑化されます。（代わりに動作が小さくなります）
@@ -112,7 +112,7 @@ rem -- 間引きする
 rem ---  回転間引き角度
 
 echo --------------
-set THRESHOLD_ROT=3
+set THRESHOLD_ROT=5
 echo 回転キーの間引きに使用する角度(0～180度まで小数可)を指定します
 echo 指定された角度以内の回転があった場合に間引きされます。
 echo 何も入力せず、ENTERを押下した場合、%THRESHOLD_ROT%度間引きます。

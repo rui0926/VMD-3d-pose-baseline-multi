@@ -8,12 +8,12 @@ import re
 import os
 import numpy as np
 
-from VmdWriter import VmdWriter, VmdInfoIk, VmdShowIkFrame
-from VmdReader import VmdReader, VmdMotion
+from applications.VmdWriter import VmdWriter, VmdInfoIk, VmdShowIkFrame
+from applications.VmdReader import VmdReader, VmdMotion
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
-def output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, vmd_type):
+def output_vmd(bone_frame_dic, vmd_file, is_ik, vmd_type):
     writer = VmdWriter()
     
     # ディクショナリ型の疑似二次元配列から、一次元配列に変換
@@ -23,8 +23,7 @@ def output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, vmd_type):
             bone_frames.append(bf)
 
     # vmd出力ファイルにフレーム番号再設定
-    output_vmd_file = vmd_file.replace("[uDDDD]", "u{0:05d}".format(upright_idxs[0]))
-    output_vmd_file = output_vmd_file.replace("[type]", vmd_type)
+    output_vmd_file = vmd_file.replace("[type]", vmd_type)
 
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     showik_frames = make_showik_frames(is_ik)

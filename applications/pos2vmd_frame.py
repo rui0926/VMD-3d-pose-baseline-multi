@@ -4,8 +4,8 @@
 from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QMatrix4x4
 import logging
 
-from VmdWriter import VmdBoneFrame
-from VmdReader import VmdReader, VmdMotion
+from applications.VmdWriter import VmdBoneFrame
+from applications.VmdReader import VmdReader, VmdMotion
 import math
 
 logger = logging.getLogger("__main__").getChild(__name__)
