@@ -11,24 +11,28 @@ logger = logging.getLogger("__main__").getChild(__name__)
 # フィルターをかける
 def smooth_filter(bone_frame_dic, is_groove, smooth_times):
 
-    # まず球形補間
-    smooth_move(bone_frame_dic, is_groove, smooth_times)
-    smooth_angle(bone_frame_dic, smooth_times)
-    smooth_IK(bone_frame_dic, smooth_times)
+    if smooth_times > 0:
+        # まず球形補間
+        smooth_move(bone_frame_dic, is_groove, smooth_times)
+        smooth_angle(bone_frame_dic, smooth_times)
+        smooth_IK(bone_frame_dic, smooth_times)
     
     # JSONファイルから設定を読み込む
-    config = json.load(open("filter/config.json", "r"))
+    config_qq = json.load(open("filter/config_qq.json", "r"))
+
+    # JSONファイルから設定を読み込む
+    config_move = json.load(open("filter/config_move.json", "r"))
 
     # 移動用フィルタ
-    pxfilter = OneEuroFilter(**config)
-    pyfilter = OneEuroFilter(**config)
-    pzfilter = OneEuroFilter(**config)
+    pxfilter = OneEuroFilter(**config_move)
+    pyfilter = OneEuroFilter(**config_move)
+    pzfilter = OneEuroFilter(**config_move)
 
     # 回転用フィルタ
-    rxfilter = OneEuroFilter(**config)
-    ryfilter = OneEuroFilter(**config)
-    rzfilter = OneEuroFilter(**config)
-    rwfilter = OneEuroFilter(**config)
+    rxfilter = OneEuroFilter(**config_qq)
+    ryfilter = OneEuroFilter(**config_qq)
+    rzfilter = OneEuroFilter(**config_qq)
+    rwfilter = OneEuroFilter(**config_qq)
 
     for key in bone_frame_dic.keys():
         for n, frame in enumerate(bone_frame_dic[key]):

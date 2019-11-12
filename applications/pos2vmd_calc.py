@@ -669,7 +669,7 @@ def calc_leg_angle(a, b, c):
     return angle
 
 # センターZの計算 
-def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_scale, center_z_scale, is_ik):
+def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame, center_xy_scale, center_z_scale, is_ik, base_dir, now_str):
 
     if center_z_scale == 0:
         return
@@ -681,16 +681,17 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
     #     logger.info("B) %s: Neck: %s, RHip: %s, LHip: %s", ds[pos2vmd_utils.DEPTH_INDEX["index"]], ds[pos2vmd_utils.DEPTH_INDEX["Neck"]], ds[pos2vmd_utils.DEPTH_INDEX["RHip"]], ds[pos2vmd_utils.DEPTH_INDEX["LHip"]])
 
     nd_depths = np.array(depths)
+    nd_confs = np.array(depth_confs)
 
     # # 一旦大きくする
     # nd_depths[:,1:] *= (center_z_scale * 10)
 
     # # 深度値の配列
     # for frame in range(nd_depths.shape[0]):
-    #     for j in range(nd_depths.shape[1] - 1):
-    #         if j > 0:
-    #             ds = nd_depths[frame,j].copy()
-    #             nd_depths[frame,j] = np.median(ds[ds != 0])
+    #     # for j in range(nd_depths.shape[1] - 1):
+    #     #     if j > 0:
+    #     #         ds = nd_depths[frame,j].copy()
+    #     #         nd_depths[frame,j] = np.median(ds[ds != 0])
 
     #     for didx in pos2vmd_utils.DEPTH_INDEX.values():
     #         if didx == 0: continue
@@ -698,11 +699,14 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
     #         # 今回深度が取れてない場合
     #         if nd_depths[frame][didx] == 0:
     #             if frame == 0 or nd_depths[frame - 1][didx] == 0:
-    #                 # 前回も0なら周囲の平均値(0は含まない)
-    #                 ds = nd_depths[frame][1:]
-    #                 nd_depths[frame][didx] = np.median(ds[ds != 0])
+    #                 continue
+    #                 # # 前回も0なら周囲の平均値(0は含まない)
+    #                 # ds = nd_depths[frame][1:]
+    #                 # nd_depths[frame][didx] = np.mean(ds[ds != 0])
     #             else:
     #                 nd_depths[frame][didx] = nd_depths[frame - 1][didx]
+
+    # np.savetxt('depth1.txt', nd_depths, fmt='%.10f')
 
     # nd_depths_avgs = np.zeros(nd_depths.shape)
 
@@ -720,24 +724,69 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
     #         ndd = nd_depths[frame:frame+10,1:].copy()
     #         nd_depths[frame,1:] = np.mean(ndd[ndd != 0], axis=0)
 
-    # 統合深度取得(末端を除く)
+    # 列単位に平均をとって滑らかにする
+    for _ in range(3):
+        for frame in range(nd_depths.shape[0]):
+            for j in range(1,nd_depths.shape[1]):
+                ndd = nd_depths[frame:frame+10,j]
+                if np.all(ndd == 0):
+                    if frame == 0:
+                        nd_depths[frame,j] = 0
+                    else:
+                        nd_depths[frame,j] = nd_depths[frame - 1,j]
+                else:
+                    nd_depths[frame,j] = np.mean(ndd[ndd.nonzero()])
+
+            # ndd = nd_depths[frame:frame+10,1:].copy()
+            # nd_depths[frame:frame+10,1:] = np.mean(ndd[ndd != 0], axis=0)
+    # np.savetxt('depth3.txt', nd_depths, fmt='%.10f')
+
+    # 欠損は埋める
+    np.nan_to_num(nd_depths, copy=False)
+
+    # Openposeの各関節の重み
+    weights = [0.1,0.8,0.4,0.1,0.05,0.4,0.1,0.05,0.8,0.5,0.2,0.8,0.5,0.2,0.05,0.05,0.05,0.05]
+
+    # 関節間の重みを計算する
+    all_weights = weights
+    for (start_idx, end_idx, start_w, end_w) in [(0,1,weights[0],weights[1]),(1,2,weights[1],weights[2]),(2,3,weights[2],weights[3]),(3,4,weights[3],weights[4]), \
+            (1,5,weights[1],weights[5]),(5,6,weights[5],weights[6]),(6,7,weights[6],weights[7]),(1,8,weights[1],weights[8]),(8,9,weights[8],weights[9]), \
+            (9,10,weights[9],weights[10]),(1,11,weights[1],weights[11]),(11,12,weights[11],weights[12]),(12,13,weights[12],weights[13]),(0,14,weights[0],weights[14]), \
+            (14,16,weights[14],weights[16]),(0,15,weights[0],weights[15]),(15,17,weights[15],weights[17])]:
+        all_weights.append(np.mean([start_w, end_w]))
+
+    # 統合深度取得
     # depth_values = np.average(nd_depths_avgs[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
     # depth_values = np.argmax(nd_depths[:,[2,3,6,9,10,12,13]], axis=1)
-    depth_values = np.median(nd_depths[:,1:], axis=1)
+    depth_values = []
+    for frame in range(nd_depths.shape[0]):
+        # depth_values.append(np.mean(nd_depths[frame,1:][nd_depths[frame,1:].nonzero()]))
+        # フレーム単位の信頼度から重みを再計算する
+        frame_weights = np.array(nd_confs[frame][1:]) * all_weights
+
+        end_idx = len(nd_confs[frame][1:])
+        if frame_weights[18:].sum() < 0.1:
+            # 18以降が信頼度ない場合、無視
+            end_idx = 18
+
+        if frame_weights[:end_idx].max() < 0.2 or np.all(nd_depths[frame][1:end_idx+1] == 0):
+            # 重みが小さいの場合、信頼できるデータが無いので過去データ流用
+            if frame == 0:
+                depth_values.append(0)
+            else:
+                depth_values.append(depth_values[frame - 1])
+        else:
+            depth_values.append(np.average(nd_depths[frame][1:end_idx+1], weights=frame_weights[:end_idx]))
+
     # # np.savetxt('depth2.txt', nd_depths, fmt='%.10f')
 
-    # 前後の計151フレームで深度平均をとる
-    depth_value_avgs = calc_move_average(depth_values, 151)
+    # depth_value_avgs = smooth_depth(depth_values, 5)
 
-    # # 列単位に平均値をとって滑らかにする
-    # for _ in range(3):
-    #     for frame in range(nd_depths.shape[0]):
-    #         ndd = nd_depths[frame:frame+10,1:].copy()
-    #         nd_depths[frame,1:] = np.mean(ndd, axis=0)
-    # # np.savetxt('depth3.txt', nd_depths, fmt='%.10f')
+    # np.savetxt('{0}/depth_value_avgs.txt'.format(base_dir), np.array(depth_value_avgs), fmt='%.10f')
 
-    # # ユーロフィルターをかける
-    # filter_depths(nd_depths)
+    # # 前後の計11フレームで深度平均をとる
+    # depth_value_avgs = calc_move_average(depth_values, 11)
+
     # # np.savetxt('depth4.txt', nd_depths, fmt='%.10f')
 
     # LINSPACE_NUM = 5
@@ -810,21 +859,40 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
     # depth_values = np.average(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
     # np.savetxt('depth_hip_avg.txt', depth_values, fmt='%.10f')
 
-    # smooth_depth(depth_values, 5)
+    # depth_value_avgs = smooth_depth(depth_values, 5)
     # np.savetxt('depth_hip_median_smooth.txt', depth_values, fmt='%.10f')
+
+    # depth_value_avgs = depth_values
+
+    # 前後フレームで深度平均をとる
+    depth_value_avgs = calc_move_average(depth_values, 3)
+
+    # ユーロフィルターをかける
+    filter_depths(depth_value_avgs)
+
+    # 深度データ
+    depth_avgs_path = '{0}/depth_avgs_{1}.txt'.format(base_dir, now_str)
+    # 追記モードで開く
+    depthf = open(depth_avgs_path, 'w')
 
     # 前回動いたフレーム
     prev_left_frame = 0
     prev_right_frame = 0
 
     # 深度からセンターZを求める
-    for frame, now_depth in enumerate(depth_value_avgs):
+    for frame, (org_depth, now_depth) in enumerate(zip(depth_values, depth_value_avgs)):
         if frame >= len(bone_frame_dic["センター"]):
             break
 
         # センターZ倍率から求める
-        center_z = now_depth * center_z_scale
+        center_z = now_depth * center_z_scale * -1
         logger.debug("frame: %s, now: %s, z:%s", frame, now_depth, center_z)
+
+        depthf.write("{0}, o: {1}, n:{2}, z:{3}\n".format(frame, org_depth, now_depth, center_z))
+
+        # bone_frame_dic["センター"][frame].position.setZ(center_z)
+        # bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
+        # bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
 
         if frame == 0:
             bone_frame_dic["センター"][frame].position.setZ(center_z)
@@ -846,11 +914,11 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
                 # 右足も左足も動いていない場合、センターZを前回から動かさない
                 # 前回インデックスで近い方採用
                 prev_idx = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
-                bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_idx].position.z() )
+                # bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_idx].position.z() )
                 bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][prev_left_frame].position.z())
                 bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][prev_right_frame].position.z())
             else:
-                bone_frame_dic["センター"][frame].position.setZ(center_z)
+                # bone_frame_dic["センター"][frame].position.setZ(center_z)
                 bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
                 bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
                 # どっちかが動いている場合、センターZ適用
@@ -864,9 +932,10 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
                 # else:
                 #     bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][prev_right_frame].position.z())
 
-            # # センターZは両足の間に再設定する
-            # bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
+            # センターZは両足の間に再設定する
+            bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
 
+    depthf.close()
 
 
 
@@ -1120,17 +1189,14 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, center_xy_sc
     #     # # センターZは両足の間に再設定する
     #     # bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
 
-def filter_depths(nd_depths):
+def filter_depths(depth_value_avgs):
     # JSONファイルから設定を読み込む
     config = json.load(open("filter/config_depth.json", "r"))
 
-    dfilters = [pos2vmd_filter.OneEuroFilter(**config) for x in range(nd_depths.shape[1])]
+    dfilter = pos2vmd_filter.OneEuroFilter(**config)
 
-    for frame in range(nd_depths.shape[0]):
-        for didx in range(nd_depths.shape[1]):
-            if didx == 0: continue
-            newd = dfilters[didx]( nd_depths[frame][didx], frame )
-            nd_depths[frame][didx] = newd
+    for frame in range(len(depth_value_avgs)):
+        depth_value_avgs[frame] = dfilter( depth_value_avgs[frame], frame )
 
 def smooth_depth(depth_values, smooth_times):
     # 深度の位置円滑化
