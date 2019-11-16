@@ -77,14 +77,15 @@ def smooth_filter(bone_frame_dic, is_groove, smooth_times):
             #     rotation.setScalar(rotation.scalar() * -1)
             
             if key != "センター" and key != "グルーブ":
-                # XYZWそれぞれにフィルターをかける
-                rx = rxfilter(rotation.x(), frame.frame)
-                ry = ryfilter(rotation.y(), frame.frame)
-                rz = rzfilter(rotation.z(), frame.frame)
-                rw = rwfilter(rotation.scalar(), frame.frame)
+                # XYZWそれぞれにフィルターをかける(オイラー角)
+                r = rotation.toEulerAngles()
+                rx = rxfilter(r.x(), frame.frame)
+                ry = ryfilter(r.y(), frame.frame)
+                rz = rzfilter(r.z(), frame.frame)
+                # rw = rwfilter(rotation.scalar(), frame.frame)
 
-                # 各要素(w, x, y, z)に対し独立に変換をかけているので、正規化しておく
-                frame.rotation = QQuaternion(rw, rx, ry, rz).normalized()
+                # クォータニオンに戻して保持
+                frame.rotation = QQuaternion.fromEulerAngles(rx, ry, rz)
     
 
 

@@ -78,10 +78,30 @@ echo 0を入力した場合、センターZ軸移動を行いません。
 echo ,(カンマ)で5件まで設定可能です。
 set /P CENTER_Z_SCALE="■センターZ移動倍率: "
 
+IF /I "%CENTER_Z_SCALE%" EQU "0" (
+    DEPTH_SMOOTH_TIMES=0
+
+    goto ASK_SMOOTH
+)
+
+rem ---  深度滑らかさ
+
+echo --------------
+set DEPTH_SMOOTH_TIMES=7
+echo センターZの円滑化の度数を指定します
+echo 1以上の整数のみを入力して下さい。
+echo 度数が大きいほど、円滑化されます。（代わりにセンターZの移動量が小さくなります）
+echo カメラが遠いほど値を小さく、近いほど大きい方が移動量が合います。
+echo 何も入力せず、ENTERを押下した場合、%DEPTH_SMOOTH_TIMES%回円滑化します。
+echo ,(カンマ)で5件まで設定可能です。
+set /P DEPTH_SMOOTH_TIMES="センターZ円滑化度数: "
+
+: ASK_SMOOTH
+
 rem ---  滑らかさ
 
 echo --------------
-set SMOOTH_TIMES=2
+set SMOOTH_TIMES=1
 echo モーションの円滑化の度数を指定します
 echo 1以上の整数のみを入力して下さい。
 echo 度数が大きいほど、円滑化されます。（代わりに動作が小さくなります）
@@ -157,19 +177,23 @@ for %%u in (%TARGET_DIR%) do (
                     for %%p in (%THRESHOLD_POS%) do (
                         rem -- 回転間引き角度
                         for %%r in (%THRESHOLD_ROT%) do (
-                            
-                            echo -----------------------------
-                            rem -- echo 直立調整ディレクトリ: %UPRIGHT_TARGET_DIR%
-                            echo baselineディレクトリ: %%u
-                            echo 踵位置補正: %%h
-                            echo センターXY移動倍率: %%x
-                            echo センターZ移動倍率: %%z
-                            echo 円滑化度数: %%s
-                            echo 移動間引き量: %%p
-                            echo 回転間引き角度: %%r
-                            
-                            rem ---  python 実行
-                            python applications\pos2vmd_multi.py -v %VERBOSE% -t "%%u" -b %MODEL_BONE_CSV% -c %%x -z %%z -s %%s -p %%p -r %%r -k %IK_FLAG% -e %%h -u "%UPRIGHT_TARGET_DIR%"
+                            rem -- 深度円滑化度数
+                            for %%d in (%DEPTH_SMOOTH_TIMES%) do (
+                                
+                                echo -----------------------------
+                                rem -- echo 直立調整ディレクトリ: %UPRIGHT_TARGET_DIR%
+                                echo baselineディレクトリ: %%u
+                                echo 踵位置補正: %%h
+                                echo センターXY移動倍率: %%x
+                                echo センターZ移動倍率: %%z
+                                echo センターZ円滑化度数: %%d
+                                echo 円滑化度数: %%s
+                                echo 移動間引き量: %%p
+                                echo 回転間引き角度: %%r
+                                
+                                rem ---  python 実行
+                                python main.py -v %VERBOSE% -t "%%u" -b %MODEL_BONE_CSV% -c %%x -z %%z -s %%s -p %%p -r %%r -k %IK_FLAG% -e %%h -u "%UPRIGHT_TARGET_DIR%" -d %%d
+                            )
                         )
                     )
                 )

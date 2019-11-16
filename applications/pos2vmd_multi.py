@@ -54,7 +54,7 @@ bone_frame_dic = {
 }
 
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, conf_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, base_dir, now_str):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, conf_file, start_frame_file, center_xy_scale, center_z_scale, depth_smooth_times, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, base_dir, now_str):
     # トレースモデル
     logger.info("トレースモデル: %s", bone_csv_file)
 
@@ -120,7 +120,7 @@ def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_cs
         logger.info("センターZ計算開始")
 
         # センターZの計算
-        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame, center_xy_scale, center_z_scale, is_ik, base_dir, now_str)
+        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame, center_xy_scale, center_z_scale, depth_smooth_times, is_ik, base_dir, now_str)
 
     # # 直立関連ファイルに情報出力
     # # 直立IDX
@@ -200,6 +200,9 @@ def main():
     parser.add_argument('-z', '--center-z-scale', dest='centerz', type=float,
                         default=0,
                         help='center z scale')
+    parser.add_argument('-d', '--depth-smooth-times', dest='depth_smooth_times', type=int,
+                        default=1,
+                        help='depth smooth times')
     parser.add_argument('-s', '--smooth-times', dest='smooth_times', type=int,
                         default=1,
                         help='smooth times')
@@ -256,6 +259,9 @@ def main():
     # センターZ        
     suffix = "{0}_z{1}".format(suffix, str(args.centerz))
 
+    # センターZ円滑化回数
+    suffix = "{0}_d{1}".format(suffix, str(args.depth_smooth_times))
+
     # 円滑化回数
     suffix = "{0}_s{1}".format(suffix, str(args.smooth_times))
     
@@ -284,7 +290,7 @@ def main():
 
     positions_multi = pos2vmd_utils.read_positions_multi(position_file)
     
-    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, args.bone, depth_file, conf_file, start_frame_file, args.centerxy, args.centerz, args.smooth_times, args.threshold_pos, args.threshold_rot, is_ik, args.heelpos, base_dir, now_str)
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, args.bone, depth_file, conf_file, start_frame_file, args.centerxy, args.centerz, args.depth_smooth_times, args.smooth_times, args.threshold_pos, args.threshold_rot, is_ik, args.heelpos, base_dir, now_str)
 
 
 if __name__ == '__main__':
