@@ -5,6 +5,7 @@ from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QMatrix4x4
 import logging
 import json
 import math
+import numpy as np
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
@@ -117,7 +118,11 @@ def smooth_angle_bone(bone_frame_dic, smooth_times, target_bones):
 
                     if prev2_bf != now_bf.rotation:
                         # 角度が違っていたら、球形補正開始
-                        prev1_bf.rotation = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5)
+                        euler = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5).toEulerAngles()
+                        euler.setX(0 if np.isnan(euler.x()) else euler.x())
+                        euler.setY(0 if np.isnan(euler.x()) else euler.y())
+                        euler.setZ(0 if np.isnan(euler.x()) else euler.z())
+                        prev1_bf.rotation = QQuaternion.fromEulerAngles(euler)
 
 def smooth_move(bone_frame_dic, is_groove, smooth_times):
     # センターを滑らかに

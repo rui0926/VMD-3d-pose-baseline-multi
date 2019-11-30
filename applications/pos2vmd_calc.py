@@ -888,16 +888,16 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame,
     depth_avgs_path = '{0}/depth_avgs_{1}.txt'.format(base_dir, now_str)
     depthf = open(depth_avgs_path, 'w')
 
-    # 前回動いたフレーム
-    prev_left_frame = 0
-    prev_right_frame = 0
-    prev_z_rate = 0.5
-
     # 深度からセンターZを求める
     for n in range(depth_smooth_times):
         center_z_list = []
         left_leg_ik_z_list = []
         right_leg_ik_z_list = []
+
+        # 前回動いたフレーム
+        prev_left_frame = 0
+        prev_right_frame = 0
+        prev_z_rate = 0.5
 
         for frame, (org_depth, now_depth) in enumerate(zip(depth_values, depth_value_avgs)):
             if frame >= len(bone_frame_dic["センター"]):
