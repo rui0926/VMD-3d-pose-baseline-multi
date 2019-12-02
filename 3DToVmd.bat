@@ -69,7 +69,7 @@ rem set /P CENTER_XY_SCALE="■センターXY移動倍率: "
 
 rem ---  センターZ移動倍率
 echo --------------
-set CENTER_Z_SCALE=2
+set CENTER_Z_SCALE=1.5
 echo センターZ移動に掛ける倍率を数値(小数可)で入力して下さい。
 echo 値が小さいほど、センターZ移動の幅が小さくなります。
 echo 目安として、カメラからの距離が近いほど、倍率を小さくした方がいいです。
@@ -87,7 +87,7 @@ IF /I "%CENTER_Z_SCALE%" EQU "0" (
 rem ---  深度滑らかさ
 
 echo --------------
-set DEPTH_SMOOTH_TIMES=7
+set DEPTH_SMOOTH_TIMES=5
 echo センターZの円滑化の度数を指定します
 echo 1以上の整数のみを入力して下さい。
 echo 度数が大きいほど、円滑化されます。（代わりにセンターZの移動量が小さくなります）
