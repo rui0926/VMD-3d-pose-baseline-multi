@@ -258,16 +258,6 @@ def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body
         initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, 1, 0))
         rotation = neck_orientation * initial_orientation.inverted()
         neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-        # head_rotation = QQuaternion.fromEulerAngles(neck_head_rotation.toEulerAngles().x(), 0, neck_head_rotation.toEulerAngles().z())
-        # neck_rotation = QQuaternion.fromEulerAngles(0, neck_head_rotation.toEulerAngles().y(), 0)
-
-        # # 頭
-        # direction = (pos[10] - pos[9])
-        # up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
-        # head_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
-        # rotation = head_orientation * initial_orientation.inverted()
-        # head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
 
         # 頭
         direction = (pos[10] - pos[9])
@@ -276,51 +266,6 @@ def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body
         initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(-1, 0, 0))
         rotation = head_orientation * initial_orientation.inverted()
         head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 首
-        # rotation = QQuaternion.rotationTo(QVector3D(0,0,-1), (pos[9] - pos[8]).normalized())
-        # neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 首
-        # direction = (pos[10] - pos[9])
-        # up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
-        # neck_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(0, 0, 1))
-        # rotation = neck_orientation * initial_orientation.inverted()
-        # neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 首
-        # direction = (pos[9] - pos[8])
-        # up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
-        # neck_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, 1, 0))
-        # rotation = neck_orientation * initial_orientation.inverted()
-        # neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 首
-        # direction = (pos[8] - pos[7])
-        # up = QVector3D.crossProduct(direction, (pos[9] - pos[8])).normalized()
-        # neck_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(-1, 0, 0))
-        # rotation = neck_orientation * initial_orientation.inverted()
-        # neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 首
-        # direction = (pos[14] - pos[11])
-        # up = QVector3D.crossProduct(direction, (pos[9] - pos[8])).normalized()
-        # neck_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(-1, 0, 0), QVector3D(0, -1, 0))
-        # rotation = neck_orientation * initial_orientation.inverted()
-        # neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-
-        # # 頭
-        # direction = pos[9] - pos[8]
-        # up = QVector3D.crossProduct(direction, (pos[10] - pos[9])).normalized()
-        # head_orientation = QQuaternion.fromDirection(direction, up)
-        # initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(1, 0, 0))
-        # rotation = head_orientation * initial_orientation.inverted()
-        # head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
-        # # head_rotation = QQuaternion()
 
     # 首の傾きデータ
     neck_correctqq = QQuaternion()
