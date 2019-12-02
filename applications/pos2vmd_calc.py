@@ -778,7 +778,7 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame,
             # 18以降が信頼度ない場合、無視
             end_idx = 19
 
-        if nd_confs[frame][1:end_idx].max() < 0.2 or np.all(nd_depths[frame][1:end_idx+1] == 0):
+        if np.median(nd_confs[frame][1:end_idx]) < 0.2 or np.all(nd_depths[frame][1:end_idx+1] == 0):
             # 信頼度が低い場合、信頼できるデータが無いので過去データ流用
             if frame == 0:
                 depth_values.append(0)
@@ -874,7 +874,7 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame,
     # depth_value_avgs = depth_values
 
     # 前後フレームで深度平均をとる
-    depth_value_avgs = calc_move_average(depth_values, 3)
+    depth_value_avgs = calc_move_average(depth_values, 11)
 
     # # 中央値を取る
     # depth_value_avgs = []
@@ -903,9 +903,6 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame,
             if frame >= len(bone_frame_dic["センター"]):
                 break
 
-            # # センターZ倍率から求める（二次関数で傾きを調整する）
-            # center_z = ((1/center_z_scale) * (now_depth ** 2) * -1) * center_z_scale
-            
             # センターZ倍率から求める
             center_z = now_depth * center_z_scale * -1 if n == 0 else now_depth
             logger.debug("frame: %s, now: %s, z:%s", frame, now_depth, center_z)
