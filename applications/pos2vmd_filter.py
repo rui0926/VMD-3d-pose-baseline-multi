@@ -229,7 +229,7 @@ class OneEuroFilter(object):
     # IK用処理スキップ
     def skip(self, x, timestamp=None):
         # ---- update the sampling frequency based on timestamps
-        if self.__lasttime and timestamp:
+        if self.__lasttime and timestamp and self.__lasttime != timestamp:
             self.__freq = 1.0 / (timestamp-self.__lasttime)
         self.__lasttime = timestamp
         prev_x = self.__x.lastValue()
