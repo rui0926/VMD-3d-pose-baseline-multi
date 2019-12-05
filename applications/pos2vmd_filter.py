@@ -78,7 +78,7 @@ def smooth_filter(bone_frame_dic, is_groove, smooth_times):
             #     rotation.setScalar(rotation.scalar() * -1)
             
             if key != "センター" and key != "グルーブ":
-                # XYZWそれぞれにフィルターをかける(オイラー角)
+                # XYZそれぞれにフィルターをかける(オイラー角)
                 r = rotation.toEulerAngles()
                 rx = rxfilter(r.x(), frame.frame)
                 ry = ryfilter(r.y(), frame.frame)
@@ -137,16 +137,25 @@ def smooth_move_bone(bone_frame_dic, smooth_times, target_bones):
     for bone_name in target_bones:
         for n in range(smooth_times):
             for frame in range(len(bone_frame_dic[bone_name])):
-                if frame >= 4:
+                if 2 <= frame <= len(bone_frame_dic[bone_name]) - 1:
                     prev2_bf = bone_frame_dic[bone_name][frame - 2]
                     prev1_bf = bone_frame_dic[bone_name][frame - 1]
                     now_bf = bone_frame_dic[bone_name][frame]
 
                     # 移動ボーンのどこかが動いていたら
                     if now_bf != prev2_bf:
-                        # 線形補正
-                        new_prev1_pos = prev2_bf.position + now_bf.position
-                        new_prev1_pos /= 2
+                        if 3 <= frame <= len(bone_frame_dic[bone_name]) - 2:
+                            # 5F取れるようであれば、5F
+                            prev3_bf = bone_frame_dic[bone_name][frame - 3]
+                            next_bf = bone_frame_dic[bone_name][frame + 1]
+                        else:
+                            # 取れないようであれば、3Fで採用
+                            prev3_bf = prev2_bf
+                            next_bf = now_bf
+
+                        # 線形補正(prev1自身は含めず、突飛な値を落とす)
+                        new_prev1_pos = prev2_bf.position + now_bf.position + prev3_bf.position + next_bf.position
+                        new_prev1_pos /= 4
                         prev1_bf.position = new_prev1_pos
 
 
