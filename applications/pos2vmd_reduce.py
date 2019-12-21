@@ -13,7 +13,10 @@ def reduce_frames(bone_frame_dic, is_groove, threshold_pos, threshold_rot):
     for key in bone_frame_dic.keys():
         # logger.debug("key %s", key)
         if len(bone_frame_dic[key]) > 0 and ((is_groove == False and key != "グルーブ") or is_groove):
-            reduce_bone_frame_dic[key] = reduce_bone_frame(bone_frame_dic[key], 0, len(bone_frame_dic[key]) - 1, threshold_pos, threshold_rot)
+            if is_groove and key == "グルーブ":
+                reduce_bone_frame_dic[key] = reduce_bone_frame(bone_frame_dic[key], 0, len(bone_frame_dic[key]) - 1, threshold_pos / 2, threshold_rot)
+            else:
+                reduce_bone_frame_dic[key] = reduce_bone_frame(bone_frame_dic[key], 0, len(bone_frame_dic[key]) - 1, threshold_pos, threshold_rot)
 
     return reduce_bone_frame_dic
 

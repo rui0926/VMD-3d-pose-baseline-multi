@@ -5,30 +5,35 @@ from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QMatrix4x4
 import logging
 import json
 import math
+import numpy as np
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
 # フィルターをかける
 def smooth_filter(bone_frame_dic, is_groove, smooth_times):
 
-    # まず球形補間
-    smooth_move(bone_frame_dic, is_groove, smooth_times)
-    smooth_angle(bone_frame_dic, smooth_times)
-    smooth_IK(bone_frame_dic, smooth_times)
+    if smooth_times > 0:
+        # まず球形補間
+        smooth_move(bone_frame_dic, is_groove, smooth_times)
+        smooth_angle(bone_frame_dic, smooth_times)
+        smooth_IK(bone_frame_dic, smooth_times)
     
     # JSONファイルから設定を読み込む
-    config = json.load(open("filter/config.json", "r"))
+    config_qq = json.load(open("filter/config_qq.json", "r"))
+
+    # JSONファイルから設定を読み込む
+    config_move = json.load(open("filter/config_move.json", "r"))
 
     # 移動用フィルタ
-    pxfilter = OneEuroFilter(**config)
-    pyfilter = OneEuroFilter(**config)
-    pzfilter = OneEuroFilter(**config)
+    pxfilter = OneEuroFilter(**config_move)
+    pyfilter = OneEuroFilter(**config_move)
+    pzfilter = OneEuroFilter(**config_move)
 
     # 回転用フィルタ
-    rxfilter = OneEuroFilter(**config)
-    ryfilter = OneEuroFilter(**config)
-    rzfilter = OneEuroFilter(**config)
-    rwfilter = OneEuroFilter(**config)
+    rxfilter = OneEuroFilter(**config_qq)
+    ryfilter = OneEuroFilter(**config_qq)
+    rzfilter = OneEuroFilter(**config_qq)
+    rwfilter = OneEuroFilter(**config_qq)
 
     for key in bone_frame_dic.keys():
         for n, frame in enumerate(bone_frame_dic[key]):
@@ -73,14 +78,15 @@ def smooth_filter(bone_frame_dic, is_groove, smooth_times):
             #     rotation.setScalar(rotation.scalar() * -1)
             
             if key != "センター" and key != "グルーブ":
-                # XYZWそれぞれにフィルターをかける
-                rx = rxfilter(rotation.x(), frame.frame)
-                ry = ryfilter(rotation.y(), frame.frame)
-                rz = rzfilter(rotation.z(), frame.frame)
-                rw = rwfilter(rotation.scalar(), frame.frame)
+                # XYZそれぞれにフィルターをかける(オイラー角)
+                r = rotation.toEulerAngles()
+                rx = rxfilter(r.x(), frame.frame)
+                ry = ryfilter(r.y(), frame.frame)
+                rz = rzfilter(r.z(), frame.frame)
+                # rw = rwfilter(rotation.scalar(), frame.frame)
 
-                # 各要素(w, x, y, z)に対し独立に変換をかけているので、正規化しておく
-                frame.rotation = QQuaternion(rw, rx, ry, rz).normalized()
+                # クォータニオンに戻して保持
+                frame.rotation = QQuaternion.fromEulerAngles(rx, ry, rz)
     
 
 
@@ -112,7 +118,11 @@ def smooth_angle_bone(bone_frame_dic, smooth_times, target_bones):
 
                     if prev2_bf != now_bf.rotation:
                         # 角度が違っていたら、球形補正開始
-                        prev1_bf.rotation = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5)
+                        euler = QQuaternion.slerp(prev2_bf.rotation, now_bf.rotation, 0.5).toEulerAngles()
+                        euler.setX(0 if np.isnan(euler.x()) else euler.x())
+                        euler.setY(0 if np.isnan(euler.x()) else euler.y())
+                        euler.setZ(0 if np.isnan(euler.x()) else euler.z())
+                        prev1_bf.rotation = QQuaternion.fromEulerAngles(euler)
 
 def smooth_move(bone_frame_dic, is_groove, smooth_times):
     # センターを滑らかに
@@ -127,16 +137,25 @@ def smooth_move_bone(bone_frame_dic, smooth_times, target_bones):
     for bone_name in target_bones:
         for n in range(smooth_times):
             for frame in range(len(bone_frame_dic[bone_name])):
-                if frame >= 4:
+                if 2 <= frame <= len(bone_frame_dic[bone_name]) - 1:
                     prev2_bf = bone_frame_dic[bone_name][frame - 2]
                     prev1_bf = bone_frame_dic[bone_name][frame - 1]
                     now_bf = bone_frame_dic[bone_name][frame]
 
                     # 移動ボーンのどこかが動いていたら
                     if now_bf != prev2_bf:
-                        # 線形補正
-                        new_prev1_pos = prev2_bf.position + now_bf.position
-                        new_prev1_pos /= 2
+                        if 3 <= frame <= len(bone_frame_dic[bone_name]) - 2:
+                            # 5F取れるようであれば、5F
+                            prev3_bf = bone_frame_dic[bone_name][frame - 3]
+                            next_bf = bone_frame_dic[bone_name][frame + 1]
+                        else:
+                            # 取れないようであれば、3Fで採用
+                            prev3_bf = prev2_bf
+                            next_bf = now_bf
+
+                        # 線形補正(prev1自身は含めず、突飛な値を落とす)
+                        new_prev1_pos = prev2_bf.position + now_bf.position + prev3_bf.position + next_bf.position
+                        new_prev1_pos /= 4
                         prev1_bf.position = new_prev1_pos
 
 
@@ -219,7 +238,7 @@ class OneEuroFilter(object):
     # IK用処理スキップ
     def skip(self, x, timestamp=None):
         # ---- update the sampling frequency based on timestamps
-        if self.__lasttime and timestamp:
+        if self.__lasttime and timestamp and self.__lasttime != timestamp:
             self.__freq = 1.0 / (timestamp-self.__lasttime)
         self.__lasttime = timestamp
         prev_x = self.__x.lastValue()

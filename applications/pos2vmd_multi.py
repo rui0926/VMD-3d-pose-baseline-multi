@@ -14,12 +14,12 @@ import datetime
 import numpy as np
 import csv
 
-from VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
-import pos2vmd_utils
-import pos2vmd_calc
-import pos2vmd_frame
-import pos2vmd_filter
-import pos2vmd_reduce
+from applications.VmdWriter import VmdBoneFrame, VmdInfoIk, VmdShowIkFrame, VmdWriter
+from applications import pos2vmd_utils
+from applications import pos2vmd_calc
+from applications import pos2vmd_frame
+from applications import pos2vmd_filter
+from applications import pos2vmd_reduce
               
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ bone_frame_dic = {
 }
 
 # 関節位置情報のリストからVMDを生成します
-def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, upright_target):
+def position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, bone_csv_file, depth_file, conf_file, start_frame_file, center_xy_scale, center_z_scale, depth_smooth_times, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, base_dir, now_str):
     # トレースモデル
     logger.info("トレースモデル: %s", bone_csv_file)
 
@@ -80,23 +80,19 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
 
     # 各関節角度の算出
     for frame, positions in enumerate(positions_multi):
-        positions_gan = None
-        if positions_gan_multi is not None:
-            positions_gan = positions_gan_multi[frame]
+        pos2vmd_frame.position_to_frame(bone_frame_dic, positions, None, smoothed_2d, frame, is_upper2_body, slope_motion)   
 
-        pos2vmd_frame.position_to_frame(bone_frame_dic, positions, positions_gan, smoothed_2d, frame, is_upper2_body, slope_motion)   
+    # logger.info("直立フレーム推定開始")
 
-    logger.info("直立フレーム推定開始")
+    # # 体幹的に最も直立しているINDEX抽出
+    # upright_idxs = pos2vmd_calc.calc_upright_body(bone_frame_dic)
 
-    # 体幹的に最も直立しているINDEX抽出
-    upright_idxs = pos2vmd_calc.calc_upright_body(bone_frame_dic)
-
-    logger.info(upright_idxs)
+    # logger.info(upright_idxs)
 
     logger.info("センター計算開始")
 
     # センター調整
-    target_upright_idx, target_upright_depth, target_start_pos = pos2vmd_utils.load_upright_target(upright_target)
+    # target_upright_idx, target_upright_depth, target_start_pos = pos2vmd_utils.load_upright_target(upright_target)
 
     # センターの計算
     # pos2vmd_calc.calc_center(bone_frame_dic, smoothed_2d, bone_csv_file, upright_idxs, center_xy_scale, center_z_scale, heelpos, target_upright_idx, target_start_pos)
@@ -117,33 +113,33 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
         bone_frame_dic["左足ＩＫ"] = []
         bone_frame_dic["右足ＩＫ"] = []
 
-    depths = pos2vmd_utils.load_depth(depth_file)
+    depths, depth_confs = pos2vmd_utils.load_depth(depth_file, conf_file)
 
     if depths is not None and center_z_scale > 0:
         # 深度ファイルがあり、スケールが指定されている場合のみ、Z軸計算
         logger.info("センターZ計算開始")
 
         # センターZの計算
-        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth, is_ik)
+        pos2vmd_calc.calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame, center_xy_scale, center_z_scale, depth_smooth_times, is_ik, base_dir, now_str)
 
-    # 直立関連ファイルに情報出力
-    # 直立IDX
-    upright_file.write(str(upright_idxs[0]))
-    upright_file.write("\n")
-    # 先頭フレームのセンターpos
-    center_pos = bone_frame_dic["センター"][0].position
-    upright_file.write("center,{0},{1},{2}".format(center_pos.x(), center_pos.y(), center_pos.z()))
-    upright_file.write("\n")
-    # 先頭フレームの2D
-    # logger.info("upright: %s", upright_idxs[0])
-    for key in ["Neck", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle"]:
-        # logger.info("key: %s, v: %s", k, v)
-        s2d = smoothed_2d[0][pos2vmd_utils.SMOOTHED_2D_INDEX[key]]
-        # logger.info(s2d)
-        upright_file.write("{0},{1},{2},{3}".format(key, s2d.x(), s2d.y(), s2d.z()))
-        upright_file.write("\n")
+    # # 直立関連ファイルに情報出力
+    # # 直立IDX
+    # upright_file.write(str(upright_idxs[0]))
+    # upright_file.write("\n")
+    # # 先頭フレームのセンターpos
+    # center_pos = bone_frame_dic["センター"][0].position
+    # upright_file.write("center,{0},{1},{2}".format(center_pos.x(), center_pos.y(), center_pos.z()))
+    # upright_file.write("\n")
+    # # 先頭フレームの2D
+    # # logger.info("upright: %s", upright_idxs[0])
+    # for key in ["Neck", "RHip", "LHip", "RKnee", "LKnee", "RAnkle", "LAnkle"]:
+    #     # logger.info("key: %s, v: %s", k, v)
+    #     s2d = smoothed_2d[0][pos2vmd_utils.SMOOTHED_2D_INDEX[key]]
+    #     # logger.info(s2d)
+    #     upright_file.write("{0},{1},{2},{3}".format(key, s2d.x(), s2d.y(), s2d.z()))
+    #     upright_file.write("\n")
 
-    upright_file.close()
+    # upright_file.close()
 
     # グルーブ移管
     is_groove = pos2vmd_utils.set_groove(bone_frame_dic, bone_csv_file)
@@ -151,14 +147,13 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
     if is_groove:
         logger.info("グルーブ移管")
 
-    if smooth_times > 0:
-        logger.info("円滑化開始")
-        pos2vmd_filter.smooth_filter(bone_frame_dic, is_groove, smooth_times)
+    logger.info("円滑化開始")
+    pos2vmd_filter.smooth_filter(bone_frame_dic, is_groove, smooth_times)
 
     if threshold_pos == 0 and threshold_rot == 0:
         # FULLキーVMD出力
         logger.info("FULL VMD出力開始")
-        full_vmd_file = pos2vmd_utils.output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, "full")
+        full_vmd_file = pos2vmd_utils.output_vmd(bone_frame_dic, vmd_file, is_ik, "full")
         logger.info("FULL VMDファイル出力完了: {0}".format(full_vmd_file))
     else:
         # 間引き後キーVMD出力
@@ -166,12 +161,12 @@ def position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_fil
         reduce_bone_frame_dic = pos2vmd_reduce.reduce_frames(bone_frame_dic, is_groove, threshold_pos, threshold_rot)
 
         logger.info("間引き VMD出力開始")
-        reduce_vmd_file = pos2vmd_utils.output_vmd(reduce_bone_frame_dic, vmd_file, upright_idxs, is_ik, "reduce")
+        reduce_vmd_file = pos2vmd_utils.output_vmd(reduce_bone_frame_dic, vmd_file, is_ik, "reduce")
         logger.info("間引き VMDファイル出力完了: {0}".format(reduce_vmd_file))
 
 
 
-def position_multi_file_to_vmd(position_file, position_gan_file, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, upright_target):
+def position_multi_file_to_vmd(position_file, position_gan_file, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos):
     positions_multi = pos2vmd_utils.read_positions_multi(position_file)
     
     # 3dpose-gan がない場合はNone
@@ -180,10 +175,10 @@ def position_multi_file_to_vmd(position_file, position_gan_file, upright_file, v
     else:
         positions_gan_multi = None
 
-    position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos, upright_target)
+    position_list_to_vmd_multi(positions_multi, positions_gan_multi, upright_file, vmd_file, smoothed_file, bone_csv_file, depth_file, start_frame_file, center_xy_scale, center_z_scale, smooth_times, threshold_pos, threshold_rot, is_ik, heelpos)
     
 
-if __name__ == '__main__':
+def main():
     import sys
     if (len(sys.argv) < 13):
         logger.error("引数不足")
@@ -205,6 +200,9 @@ if __name__ == '__main__':
     parser.add_argument('-z', '--center-z-scale', dest='centerz', type=float,
                         default=0,
                         help='center z scale')
+    parser.add_argument('-d', '--depth-smooth-times', dest='depth_smooth_times', type=int,
+                        default=1,
+                        help='depth smooth times')
     parser.add_argument('-s', '--smooth-times', dest='smooth_times', type=int,
                         default=1,
                         help='smooth times')
@@ -217,7 +215,7 @@ if __name__ == '__main__':
     parser.add_argument('-k', '--leg-ik', dest='legik', type=int,
                         default=1,
                         help='leg ik')
-    parser.add_argument('-e', '--heel position', dest='heelpos', type=float,
+    parser.add_argument('-e', '--heel-position', dest='heelpos', type=float,
                         default=0,
                         help='heel position correction')
     args = parser.parse_args()
@@ -231,6 +229,7 @@ if __name__ == '__main__':
     position_file = base_dir + "/pos.txt"
     smoothed_file = base_dir + "/smoothed.txt"
     depth_file = base_dir + "/depth.txt"
+    conf_file = base_dir + "/conf.txt"
     start_frame_file = base_dir + "/start_frame.txt"
 
     # 3dpose-gan のposファイル。（ない可能性あり）
@@ -260,6 +259,9 @@ if __name__ == '__main__':
     # センターZ        
     suffix = "{0}_z{1}".format(suffix, str(args.centerz))
 
+    # センターZ円滑化回数
+    suffix = "{0}_d{1}".format(suffix, str(args.depth_smooth_times))
+
     # 円滑化回数
     suffix = "{0}_s{1}".format(suffix, str(args.smooth_times))
     
@@ -269,10 +271,12 @@ if __name__ == '__main__':
     # 回転間引き
     suffix = "{0}_r{1}".format(suffix, str(args.threshold_rot))
     
-    vmd_file = "{0}/{3}_{1:%Y%m%d_%H%M%S}{2}_[type].vmd".format(base_dir, datetime.datetime.now(), suffix, bone_filename)
+    now_str = "{0:%Y%m%d_%H%M%S}".format(datetime.datetime.now())
 
-    #直立インデックスファイル
-    upright_file = open("{0}/upright.txt".format(base_dir), 'w')
+    vmd_file = "{0}/{3}_{1}{2}_[type].vmd".format(base_dir, now_str, suffix, bone_filename)
+
+    # #直立インデックスファイル
+    # upright_file = open("{0}/upright.txt".format(base_dir), 'w')
 
     # ログレベル設定
     logger.setLevel(level[args.verbose])
@@ -284,4 +288,10 @@ if __name__ == '__main__':
     if args.upright_target != args.target and len(args.upright_target) > 0:
         upright_target = args.upright_target
 
-    position_multi_file_to_vmd(position_file, position_gan_file, upright_file, vmd_file, smoothed_file, args.bone, depth_file, start_frame_file, args.centerxy, args.centerz, args.smooth_times, args.threshold_pos, args.threshold_rot, is_ik, args.heelpos, upright_target)
+    positions_multi = pos2vmd_utils.read_positions_multi(position_file)
+    
+    position_list_to_vmd_multi(positions_multi, vmd_file, smoothed_file, args.bone, depth_file, conf_file, start_frame_file, args.centerxy, args.centerz, args.depth_smooth_times, args.smooth_times, args.threshold_pos, args.threshold_rot, is_ik, args.heelpos, base_dir, now_str)
+
+
+if __name__ == '__main__':
+    main()

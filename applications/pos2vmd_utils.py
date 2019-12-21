@@ -8,12 +8,12 @@ import re
 import os
 import numpy as np
 
-from VmdWriter import VmdWriter, VmdInfoIk, VmdShowIkFrame
-from VmdReader import VmdReader, VmdMotion
+from applications.VmdWriter import VmdWriter, VmdInfoIk, VmdShowIkFrame
+from applications.VmdReader import VmdReader, VmdMotion
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
-def output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, vmd_type):
+def output_vmd(bone_frame_dic, vmd_file, is_ik, vmd_type):
     writer = VmdWriter()
     
     # ディクショナリ型の疑似二次元配列から、一次元配列に変換
@@ -23,8 +23,7 @@ def output_vmd(bone_frame_dic, vmd_file, upright_idxs, is_ik, vmd_type):
             bone_frames.append(bf)
 
     # vmd出力ファイルにフレーム番号再設定
-    output_vmd_file = vmd_file.replace("[uDDDD]", "u{0:05d}".format(upright_idxs[0]))
-    output_vmd_file = output_vmd_file.replace("[type]", vmd_type)
+    output_vmd_file = vmd_file.replace("[type]", vmd_type)
 
     # writer.write_vmd_file(vmd_file, bone_frames, showik_frames, expression_frames)
     showik_frames = make_showik_frames(is_ik)
@@ -172,43 +171,32 @@ DEPTH_INDEX = {
 }
 
 # depthファイルの読み込み
-def load_depth(depth_file):
-    if os.path.exists(depth_file) == False:
-        return None
+def load_depth(depth_file, conf_file):
+    if os.path.exists(depth_file) == False or os.path.exists(conf_file) == False:
+        return None, None
 
-    depths = [[0 for i in range(len(DEPTH_INDEX))] for j in range(sum(1 for line in open(depth_file)))]
+    depths = []
+    depth_confs = []
 
-    n = 0
+    # n = 0
     # 深度ファイルからフレームINDEXを取得する
     with open(depth_file, "r") as bf:
         # カンマ区切りなので、csvとして読み込む
         reader = csv.reader(bf)
 
         for row in reader:
-            # logger.debug("row[0] {0}, row[1]: {1}, row[2]: {2}, row[3]: {3}".format(row[0], row[1], row[2], row[3]))
-            depths[n][DEPTH_INDEX["index"]] = int(row[0])
-            depths[n][DEPTH_INDEX["Nose"]] = float(row[1])
-            depths[n][DEPTH_INDEX["Neck"]] = float(row[2])
-            depths[n][DEPTH_INDEX["RShoulder"]] = float(row[3])
-            depths[n][DEPTH_INDEX["RElbow"]] = float(row[4])
-            depths[n][DEPTH_INDEX["RWrist"]] = float(row[5])
-            depths[n][DEPTH_INDEX["LShoulder"]] = float(row[6])
-            depths[n][DEPTH_INDEX["LElbow"]] = float(row[7])
-            depths[n][DEPTH_INDEX["LWrist"]] = float(row[8])
-            depths[n][DEPTH_INDEX["RHip"]] = float(row[9])
-            depths[n][DEPTH_INDEX["RKnee"]] = float(row[10])
-            depths[n][DEPTH_INDEX["RAnkle"]] = float(row[11])
-            depths[n][DEPTH_INDEX["LHip"]] = float(row[12])
-            depths[n][DEPTH_INDEX["LKnee"]] = float(row[13])
-            depths[n][DEPTH_INDEX["LAnkle"]] = float(row[14])
-            depths[n][DEPTH_INDEX["REye"]] = float(row[15])
-            depths[n][DEPTH_INDEX["LEye"]] = float(row[16])
-            depths[n][DEPTH_INDEX["REar"]] = float(row[17])
-            depths[n][DEPTH_INDEX["LEar"]] = float(row[18])
-        
-            n += 1
+            depths.append([float(x.zfill(1)) for x in row])
 
-    return depths
+            # n += 1
+    # 深度ファイルからフレームINDEXを取得する
+    with open(conf_file, "r") as bf:
+        # カンマ区切りなので、csvとして読み込む
+        reader = csv.reader(bf)
+
+        for row in reader:
+            depth_confs.append([float(x.zfill(1)) for x in row])
+
+    return depths, depth_confs
 
 SMOOTHED_2D_INDEX = {
     "Nose": 0,

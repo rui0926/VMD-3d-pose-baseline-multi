@@ -4,8 +4,8 @@
 from PyQt5.QtGui import QQuaternion, QVector4D, QVector3D, QMatrix4x4
 import logging
 
-from VmdWriter import VmdBoneFrame
-from VmdReader import VmdReader, VmdMotion
+from applications.VmdWriter import VmdBoneFrame
+from applications.VmdReader import VmdReader, VmdMotion
 import math
 
 logger = logging.getLogger("__main__").getChild(__name__)
@@ -42,10 +42,10 @@ def position_to_frame(bone_frame_dic, pos, pos_gan, smoothed_2d, frame, is_upper
     bf.rotation = lower_body_rotation
     bone_frame_dic["下半身"].append(bf)
 
-    # 頭の方向の安定化のためNeck/NoseとHeadを500mm後ろへ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
+    # 頭の方向の安定化のためNeck/NoseとHeadを少し後ろへ動かす(LSld, RSld, Hipでできる平面の垂直方向へ動かす)
     up = QVector3D.crossProduct((pos[0] - pos[14]), (pos[14] - pos[11])).normalized()
-    pos[9] += up * 500
-    pos[10] += up * 500
+    pos[9] += up * 100
+    pos[10] += up * 100
 
     neck_rotation, head_rotation = \
         position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body_rotation2, upper_correctqq, is_gan, slope_motion)
@@ -252,19 +252,19 @@ def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body
         # 体幹が 3d-pose-baseline で決定されている場合
 
         # 首
-        direction = pos[9] - pos[8]
-        up = QVector3D.crossProduct((pos[14] - pos[11]), direction).normalized()
-        neck_orientation = QQuaternion.fromDirection(up, direction)
-        initial_orientation = QQuaternion.fromDirection(QVector3D(0, -1, 0), QVector3D(0, 0, -1))
+        direction = (pos[9] - pos[8])
+        up = QVector3D.crossProduct(direction, (pos[14] - pos[11])).normalized()
+        neck_orientation = QQuaternion.fromDirection(direction, up)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, -1), QVector3D(0, 1, 0))
         rotation = neck_orientation * initial_orientation.inverted()
         neck_rotation = upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
 
         # 頭
-        direction = pos[10] - pos[9]
-        up = QVector3D.crossProduct((pos[9] - pos[8]), (pos[10] - pos[9]))
-        orientation = QQuaternion.fromDirection(direction, up)
-        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 1, 0), QVector3D(1, 0, 0))
-        rotation = upper_correctqq * orientation * initial_orientation.inverted()
+        direction = (pos[10] - pos[9])
+        up = QVector3D.crossProduct(direction, pos[8] - pos[7]).normalized()
+        head_orientation = QQuaternion.fromDirection(direction, up)
+        initial_orientation = QQuaternion.fromDirection(QVector3D(0, 0, 1), QVector3D(-1, 0, 0))
+        rotation = head_orientation * initial_orientation.inverted()
         head_rotation = neck_rotation.inverted() * upper_body_rotation2.inverted() * upper_body_rotation1.inverted() * rotation
 
     # 首の傾きデータ
@@ -289,7 +289,32 @@ def position_to_frame_head(frame, pos, pos_gan, upper_body_rotation1, upper_body
     
     head_rotation = head_correctqq * head_rotation
 
+    neck_rotation = calc_limited_rotation(neck_rotation, -60, 50, -50, 50, -40, 40)
+    head_rotation = calc_limited_rotation(head_rotation, -30, 20, -20, 20, -30, 30)
+
     return neck_rotation, head_rotation
+
+# 可動域を限定した回転
+# 参考: http://www.japanpt.or.jp/upload/jspt/obj/files/publiccomment/4_rom_20140612.pdf
+def calc_limited_rotation(rot, minx, maxx, miny, maxy, minz, maxz):
+    euler = rot.toEulerAngles()
+
+    if euler.x() < minx:
+        euler.setX(minx)
+    elif euler.x() > maxx:
+        euler.setX(maxx)
+    
+    if euler.y() < miny:
+        euler.setY(miny)
+    elif euler.y() > maxy:
+        euler.setY(maxy)
+
+    if euler.z() < minz:
+        euler.setZ(minz)
+    elif euler.z() > maxz:
+        euler.setZ(maxz)
+
+    return QQuaternion.fromEulerAngles(euler)
 
 def is_smoothed_prev_frame(bone_frame_dic, frame, bone_rotation_dic, angle):
     # 最初は問答無用でOK
@@ -340,6 +365,10 @@ def position_to_frame_trunk(bone_frame_dic, frame, pos, pos_gan, is_upper2_body,
     # 3d-pose-baseline による下半身FK
     lower_body_rotation, lower_correctqq \
         = position_to_frame_lower_calc(frame, pos, slope_motion)
+    
+    upper_body_rotation1 = calc_limited_rotation(upper_body_rotation1, -30, 45, -180, 180, -60, 60)
+    upper_body_rotation2 = calc_limited_rotation(upper_body_rotation2, -20, 40, -180, 180, -50, 50)
+    lower_body_rotation = calc_limited_rotation(lower_body_rotation, -15, 125, -180, 180, -40, 40)
 
     return upper_body_rotation1, upper_body_rotation2, upper_correctqq, lower_body_rotation, lower_correctqq, False
 

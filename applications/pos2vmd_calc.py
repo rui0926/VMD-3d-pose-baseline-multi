@@ -7,8 +7,9 @@ import csv
 import numpy as np
 import math
 import copy
+import json
 
-import pos2vmd_utils
+from applications import pos2vmd_utils, pos2vmd_filter, pos2vmd_reduce
 
 logger = logging.getLogger("__main__").getChild(__name__)
 
@@ -250,11 +251,11 @@ def calc_IK(bone_frame_dic, bone_csv_file, smoothed_2d, depth_all_frames, uprigh
         # 右足も左足も計算しなかった場合
         if n > 0 and prev_left_frame != n and prev_right_frame != n:
             # 前回インデックスで近い方採用
-            prev_idx = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
+            prev_frame = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
             # センターZを動かさない
-            # logger.info("n=%s, previdx=%s", n, prev_idx)
+            # logger.info("n=%s, previdx=%s", n, prev_frame)
             # logger.info("z変更前=%s", bone_frame_dic["センター"][n].position.z())
-            bone_frame_dic["センター"][n].position.setZ( bone_frame_dic["センター"][prev_idx].position.z() )
+            bone_frame_dic["センター"][n].position.setZ( bone_frame_dic["センター"][prev_frame].position.z() )
             # logger.info("z変更後=%s", bone_frame_dic["センター"][n].position.z())
 
 
@@ -268,10 +269,10 @@ def calc_IK(bone_frame_dic, bone_csv_file, smoothed_2d, depth_all_frames, uprigh
             #     bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][n].position.y() + heelpos )
         # elif prev_left_frame != n and prev_right_frame != n:
         #     # 固定位置が近い方のINDEXを取得する
-        #     prev_idx = prev_left_frame if prev_left_frame <= prev_right_frame else prev_right_frame
+        #     prev_frame = prev_left_frame if prev_left_frame <= prev_right_frame else prev_right_frame
 
         #     # 右足も左足も計算しなかった場合、センターをコピーする
-        #     bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][prev_idx].position.y() )
+        #     bone_frame_dic["センター"][n].position.setY( bone_frame_dic["センター"][prev_frame].position.y() )
 
         # logger.debug("left_ankle_pos:{0}, right_ankle_pos: {1}".format(left_ankle_pos, right_ankle_pos))
 
@@ -668,7 +669,7 @@ def calc_leg_angle(a, b, c):
     return angle
 
 # センターZの計算 
-def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs, center_xy_scale, center_z_scale, target_upright_idx, target_upright_depth, is_ik):
+def calc_center_z(bone_frame_dic, smoothed_2d, depths, depth_confs, start_frame, center_xy_scale, center_z_scale, depth_smooth_times, is_ik, base_dir, now_str):
 
     if center_z_scale == 0:
         return
@@ -676,44 +677,500 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs
     # 直立インデックス 
     # upright_idx = upright_idxs[0]
 
-    # 深度値の配列
-    depth_values = {}
-    for ds in depths:
+    # for ds in depths:
+    #     logger.info("B) %s: Neck: %s, RHip: %s, LHip: %s", ds[pos2vmd_utils.DEPTH_INDEX["index"]], ds[pos2vmd_utils.DEPTH_INDEX["Neck"]], ds[pos2vmd_utils.DEPTH_INDEX["RHip"]], ds[pos2vmd_utils.DEPTH_INDEX["LHip"]])
+
+    nd_depths = np.array(depths)
+    nd_confs = np.array(depth_confs)
+
+    # Openposeの各関節の重み
+    weights = [0.1,0.8,0.4,0.1,0.05,0.4,0.1,0.05,0.7,0.3,0.1,0.7,0.3,0.1,0.05,0.05,0.05,0.05]
+
+    # 関節間の重みを計算する
+    all_weights = weights
+    for (start_idx, end_idx, start_w, end_w) in [(0,1,weights[0],weights[1]),(1,2,weights[1],weights[2]),(2,3,weights[2],weights[3]),(3,4,weights[3],weights[4]), \
+            (1,5,weights[1],weights[5]),(5,6,weights[5],weights[6]),(6,7,weights[6],weights[7]),(1,8,weights[1],weights[8]),(8,9,weights[8],weights[9]), \
+            (9,10,weights[9],weights[10]),(1,11,weights[1],weights[11]),(11,12,weights[11],weights[12]),(12,13,weights[12],weights[13]),(0,14,weights[0],weights[14]), \
+            (14,16,weights[14],weights[16]),(0,15,weights[0],weights[15]),(15,17,weights[15],weights[17])]:
+        all_weights.append(np.mean([start_w, end_w]))
+
+    # # 一旦大きくする
+    # nd_depths[:,1:] *= (center_z_scale * 10)
+
+    # # 深度値の配列
+    # for frame in range(nd_depths.shape[0]):
+    #     # for j in range(nd_depths.shape[1] - 1):
+    #     #     if j > 0:
+    #     #         ds = nd_depths[frame,j].copy()
+    #     #         nd_depths[frame,j] = np.median(ds[ds != 0])
+
+    #     for didx in pos2vmd_utils.DEPTH_INDEX.values():
+    #         if didx == 0: continue
+
+    #         # 今回深度が取れてない場合
+    #         if nd_depths[frame][didx] == 0:
+    #             if frame == 0 or nd_depths[frame - 1][didx] == 0:
+    #                 continue
+    #                 # # 前回も0なら周囲の平均値(0は含まない)
+    #                 # ds = nd_depths[frame][1:]
+    #                 # nd_depths[frame][didx] = np.mean(ds[ds != 0])
+    #             else:
+    #                 nd_depths[frame][didx] = nd_depths[frame - 1][didx]
+
+    # np.savetxt('depth1.txt', nd_depths, fmt='%.10f')
+
+    # nd_depths_avgs = np.zeros(nd_depths.shape)
+
+    # for j in range(nd_depths.shape[1] - 1):
+    #     if j == 0:
+    #         # idxはそのまま
+    #         nd_depths_avgs[:,0] = nd_depths[:,0].copy()
+    #     else:
+    #         # 前後の計91フレームで深度平均をとる
+    #         nd_depths_avgs[:,j] = calc_move_average(nd_depths[:,j], 91)
+
+    # # 列単位に中央値をとる(0は除外)
+    # for _ in range(1):
+    #     for frame in range(nd_depths.shape[0]):
+    #         ndd = nd_depths[frame:frame+30,1:].copy()
+    #         nd_depths[frame,1:] = np.median(ndd[ndd != 0], axis=0)
+
+    # # 列単位に平均をとって滑らかにする
+    # for _ in range(1):
+    #     for frame in range(nd_depths.shape[0]):
+    #         # フレーム単位の信頼度から重みを再計算する
+    #         frame_weights = all_weights[0:18] * np.array(nd_confs[frame:frame+10,1:19])
+    #         # 重み付けが0の場合、とりあえず小さな値
+    #         frame_weights = np.where(frame_weights == 0, 0.0001, frame_weights)
+    #         # 深度をコピー保持
+    #         ndd = nd_depths[frame:frame+10,1:19].copy()
+    #         # 重み付きで列単位の平均値を求めて置き換える
+    #         nd_depths[frame:frame+10,1:19] = np.average(ndd, weights=frame_weights, axis=0)
+
+    #         # for j in range(1,nd_depths.shape[1]):
+    #         #     ndd = nd_depths[frame:frame+10,j]
+    #         #     if np.all(ndd == 0):
+    #         #         if frame == 0:
+    #         #             nd_depths[frame,j] = 0
+    #         #         else:
+    #         #             nd_depths[frame,j] = nd_depths[frame - 1,j]
+    #         #     else:
+    #         #         nd_depths[frame,j] = np.average(ndd, weights=)
+
+    #         # ndd = nd_depths[frame:frame+10,1:].copy()
+    #         # nd_depths[frame:frame+10,1:] = np.mean(ndd[ndd != 0], axis=0)
+    # np.savetxt('depth3.txt', nd_depths, fmt='%.10f')
+
+    # # 欠損は埋める
+    # np.nan_to_num(nd_depths, copy=False)
+
+    # 統合深度取得
+    # depth_values = np.average(nd_depths_avgs[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
+    # depth_values = np.argmax(nd_depths[:,[2,3,6,9,10,12,13]], axis=1)
+    depth_values = []
+    for frame in range(nd_depths.shape[0]):
+        # depth_values.append(np.mean(nd_depths[frame,1:][nd_depths[frame,1:].nonzero()]))
+        # フレーム単位の信頼度から重みを再計算する
+        frame_weights = all_weights * np.array(nd_confs[frame][1:])
+
+        end_idx = len(nd_confs[frame][1:])
+        if nd_confs[frame][19:].max() < 0.1:
+            # 18以降が信頼度ない場合、無視
+            end_idx = 19
+
+        if np.median(nd_confs[frame][1:end_idx]) < 0.2 or np.all(nd_depths[frame][1:end_idx+1] == 0):
+            # 信頼度が低い場合、信頼できるデータが無いので過去データ流用
+            if frame == 0:
+                depth_values.append(0)
+            else:
+                depth_values.append(depth_values[frame - 1])
+        else:
+            depth_values.append(np.average(nd_depths[frame][1:end_idx+1], weights=frame_weights[:end_idx]))
+
+    # # np.savetxt('depth2.txt', nd_depths, fmt='%.10f')
+
+    # depth_value_avgs = smooth_depth(depth_values, 5)
+
+    # np.savetxt('{0}/depth_value_avgs.txt'.format(base_dir), np.array(depth_value_avgs), fmt='%.10f')
+
+    # # 前後の計11フレームで深度平均をとる
+    # depth_value_avgs = calc_move_average(depth_values, 11)
+
+    # # np.savetxt('depth4.txt', nd_depths, fmt='%.10f')
+
+    # LINSPACE_NUM = 5
+    # for i in range(nd_depths.shape[0] - LINSPACE_NUM):
+    #     for j in range(nd_depths.shape[1] - 1):
+    #         # 一定期間の深度を連続値に置き換える
+    #         # nd_depths[i:i+LINSPACE_NUM,j+1:j+2] = np.linspace( nd_depths[i][j+1], nd_depths[i+LINSPACE_NUM][j+1], LINSPACE_NUM ).reshape(LINSPACE_NUM, 1)
+    #         avg_val = nd_depths[i][j+1] + nd_depths[i+LINSPACE_NUM][j+1] / 2
+    #         nd_depths[i:i+LINSPACE_NUM,j+1:j+2] = np.tile( avg_val ).reshape(LINSPACE_NUM, 1)
+
+    # # 足IKのXY間引き結果を一旦取得する
+    # left_leg_ik_reduce_dic = pos2vmd_reduce.reduce_bone_frame(bone_frame_dic["左足ＩＫ"], 0, len(bone_frame_dic["左足ＩＫ"]) - 1, 10, 999)
+    # right_leg_ik_reduce_dic = pos2vmd_reduce.reduce_bone_frame(bone_frame_dic["右足ＩＫ"], 0, len(bone_frame_dic["右足ＩＫ"]) - 1, 10, 999)
+
+    # # 間引いた結果残ったフレーム番号を保持
+    # reduced_frames_dic = {}
+    # for dic in [left_leg_ik_reduce_dic, right_leg_ik_reduce_dic]:
+    #     for dic_frame in dic:
+    #         if dic_frame.frame not in reduced_frames_dic:
+    #             reduced_frames_dic[dic_frame.frame] = dic_frame.frame
+
+    # reduced_frames = sorted(list(reduced_frames_dic.values()))
+
+    # logger.debug("reduced_frames: %s", reduced_frames)
+
+    # for i in range(len(reduced_frames) - 3):
+    #     # 最後の1Fは処理しないので2F目前まで処理
+    #     start_f = reduced_frames[i]
+    #     end_f = reduced_frames[i+1] + 1
+
+    #     # # 列単位に平均値をとって滑らかにする
+    #     # for _ in range(3):
+    #     #     for frame in range(start_f, end_f):
+    #     #         nd_depths[frame,1:] = np.mean(nd_depths[frame,1:], nd_depths[frame+5,1:], axis=0).copy()
+
+    #     # for j in range(nd_depths.shape[1] - 1):
+    #     #     # 足が動く開始から終わりまでの間の深度を連続値に置き換える
+    #     #     nd_depths[start_f:end_f,j+1:j+2] = np.linspace( nd_depths[start_f][j+1], nd_depths[end_f][j+1], end_f - start_f ).reshape(end_f - start_f, 1)
+
+    # # 列単位に平均値をとって滑らかにする
+    # for _ in range(3):
+    #     for frame in range(nd_depths.shape[0]):
+    #         ndd = nd_depths[frame:frame+10,1:].copy()
+    #         nd_depths[frame,1:] = np.mean(ndd, axis=0)
+
+    # filter_depths(nd_depths)
+    # # np.savetxt('depth5.txt', nd_depths, fmt='%.10f')
+
+    # # 統合深度取得
+    # depth_values = np.average(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
+
+    # depth_values = np.average(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RAnkle"], pos2vmd_utils.DEPTH_INDEX["LAnkle"]]], axis=1)
+    # np.savetxt('depth_ankle_avg.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.argmax(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
+    # np.savetxt('depth_hip_max.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.median(nd_depths[:,1:], axis=1)
+    # np.savetxt('depth_all_median.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.median(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"], pos2vmd_utils.DEPTH_INDEX["RKnee"], pos2vmd_utils.DEPTH_INDEX["LKnee"]]], axis=1)
+    # np.savetxt('depth_leg_median.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.average(nd_depths[:,1:], axis=1)
+    # np.savetxt('depth_all_avg.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.median(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
+    # np.savetxt('depth_hip_median.txt', depth_values, fmt='%.10f')
+
+    # depth_values = np.average(nd_depths[:,[pos2vmd_utils.DEPTH_INDEX["Neck"], pos2vmd_utils.DEPTH_INDEX["RHip"], pos2vmd_utils.DEPTH_INDEX["LHip"]]], axis=1)
+    # np.savetxt('depth_hip_avg.txt', depth_values, fmt='%.10f')
+
+    # depth_value_avgs = smooth_depth(depth_values, 5)
+    # np.savetxt('depth_hip_median_smooth.txt', depth_values, fmt='%.10f')
+
+    # depth_value_avgs = depth_values
+
+    # 前後フレームで深度平均をとる
+    depth_value_avgs = calc_move_average(depth_values, 11)
+
+    # # 中央値を取る
+    # depth_value_avgs = []
+    # for frame in range(len(depth_values) - 10):
+    #     depth_value_avgs.append(np.median(depth_values[frame:frame+10]))
+
+    # ユーロフィルターをかける
+    depth_value_avgs = filter_depths(depth_value_avgs)
+
+    # # 深度データ
+    # depth_avgs_path = '{0}/depth_avgs_{1}.txt'.format(base_dir, now_str)
+    # depthf = open(depth_avgs_path, 'w')
+
+    # 深度からセンターZを求める
+    for n in range(depth_smooth_times):
+        center_z_list = []
+        left_leg_ik_z_list = []
+        right_leg_ik_z_list = []
+
+        # 前回動いたフレーム
+        prev_left_frame = 0
+        prev_right_frame = 0
+        prev_z_rate = 0.5
+
+        for frame, (org_depth, now_depth) in enumerate(zip(depth_values, depth_value_avgs)):
+            if frame >= len(bone_frame_dic["センター"]):
+                break
+
+            # センターZ倍率から求める
+            center_z = now_depth * center_z_scale * -1 if n == 0 else now_depth
+            logger.debug("frame: %s, now: %s, z:%s", frame, now_depth, center_z)
+
+            # センターZを加味する前のZ位置
+            now_center_z = bone_frame_dic["センター"][frame].position.z()
+
+            if is_ik:
+                now_left_z = bone_frame_dic["左足ＩＫ"][frame].position.z()
+                now_right_z = bone_frame_dic["右足ＩＫ"][frame].position.z()
+
+                # 両足の間のどの辺にセンターZがあるか割合
+                if frame > 0 and prev_left_frame != frame and prev_right_frame != frame:
+                    # 前回から動いていない場合、前回比率保持
+                    z_rate = prev_z_rate
+                else:
+                    z_rate = abs((max(now_right_z, now_left_z) - now_center_z) / (max(now_right_z, now_left_z) - min(now_right_z, now_left_z)))
+                    z_rate = prev_z_rate if z_rate > 1 else z_rate
+                
+                if frame == 0:
+                    left_leg_ik_z = bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z
+                    right_leg_ik_z = bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z
+                else:
+                    left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][prev_left_frame].position
+                    if abs(left_leg_diff.x()) > 0.2 or abs(left_leg_diff.y()) > 0.2:
+                        # 左足IKが前回から動いていたら、フレーム登録
+                        prev_left_frame = frame
+
+                    right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][prev_right_frame].position
+                    if abs(right_leg_diff.x()) > 0.2 or abs(right_leg_diff.y()) > 0.2:
+                        # logger.info("右足ＩＫ: %s -> %s", bone_frame_dic["右足ＩＫ"][prev_right_frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
+                        # 右足IKが前回から動いていたら、フレーム登録
+                        prev_right_frame = frame
+                    
+                    if prev_left_frame != frame and prev_right_frame != frame:
+                        # 右足も左足も動いていない場合、センターZを前回から動かさない
+                        # 前回インデックスで近い方採用
+                        prev_frame = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
+                        left_leg_ik_z = left_leg_ik_z_list[prev_frame]
+                        right_leg_ik_z = right_leg_ik_z_list[prev_frame]
+                    else:
+                        # どっちか動いている場合、そのままセンターZ適用
+                        left_leg_ik_z = bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z
+                        right_leg_ik_z = bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z
+                    # else:
+                    #     # どっちかが動いている場合、センターZ部分適用
+                    #     if prev_left_frame == frame:
+                    #         # 左足が動いている場合
+                    #         calc_center_z = center_z_list[prev_right_frame]     # センターは動いていない右に合わせる
+                    #         left_leg_ik_z = now_left_z + calc_center_z          # 左はセンターを加味して動かす
+                    #         right_leg_ik_z = right_leg_ik_z_list[prev_right_frame]   # 右は前のそのまま
+                    #     else:
+                    #         # 右足が動いている場合
+                    #         calc_center_z = center_z_list[prev_left_frame]     # センターは動いていない左に合わせる
+                    #         right_leg_ik_z = now_right_z + calc_center_z          # 右はセンターを加味して動かす
+                    #         left_leg_ik_z = left_leg_ik_z_list[prev_left_frame]   # 左は前のそのまま
+
+                # センターZは両足の間に再設定する
+                calc_center_z = min(right_leg_ik_z, (left_leg_ik_z)) - ((min(right_leg_ik_z, (left_leg_ik_z)) - max(right_leg_ik_z, (left_leg_ik_z))) * z_rate)
+                # depthf.write("{0}({7}), o: {1}, n:{2}, z:{3}, c:{4}, l:{5}, r:{6}\n".format(frame, org_depth, now_depth, center_z, calc_center_z, left_leg_ik_z, right_leg_ik_z, n))
+
+                center_z_list.append(calc_center_z)
+                left_leg_ik_z_list.append(left_leg_ik_z)
+                right_leg_ik_z_list.append(right_leg_ik_z)
+
+                prev_z_rate = z_rate
+            else:
+                center_z_list.append(now_center_z)
+
+        # 前後フレームで深度平均をとる
+        depth_value_avgs = calc_move_average(center_z_list, 11)
+
+        # ユーロフィルターをかける
+        depth_value_avgs = filter_depths(depth_value_avgs)
+
+    if is_ik:
+        # Z最終設定
+        for frame, (calc_center_z, left_leg_ik_z, right_leg_ik_z) in enumerate(zip(center_z_list, left_leg_ik_z_list, right_leg_ik_z_list)):
+            bone_frame_dic["センター"][frame].position.setZ(calc_center_z)
+            bone_frame_dic["左足ＩＫ"][frame].position.setZ(left_leg_ik_z)
+            bone_frame_dic["右足ＩＫ"][frame].position.setZ(right_leg_ik_z)
+    else:
+        # Z最終設定
+        for frame, calc_center_z in enumerate(center_z_list):
+            bone_frame_dic["センター"][frame].position.setZ(calc_center_z)
+
+        # if frame == 0:
+        #     # center_z_list.append(center_z)
+        #     bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
+        #     bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
+        #     # # 足IKのZを加味する
+        #     # bone_frame_dic["センター"][frame].position.setZ(center_z + np.mean([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) - min(bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()))
+        # else:
+        #     left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][prev_left_frame].position
+        #     if abs(left_leg_diff.x()) > 0.2 or abs(left_leg_diff.y()) > 0.2:
+        #         # 左足IKが前回から動いていたら、フレーム登録
+        #         prev_left_frame = frame
+
+        #     right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][prev_right_frame].position
+        #     if abs(right_leg_diff.x()) > 0.2 or abs(right_leg_diff.y()) > 0.2:
+        #         # logger.info("右足ＩＫ: %s -> %s", bone_frame_dic["右足ＩＫ"][prev_right_frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
+        #         # 右足IKが前回から動いていたら、フレーム登録
+        #         prev_right_frame = frame
+
+        #     if prev_left_frame != frame and prev_right_frame != frame:
+        #         # 右足も左足も動いていない場合、センターZを前回から動かさない
+        #         # 前回インデックスで近い方採用
+        #         prev_frame = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
+        #         bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][prev_frame].position.z())
+        #         bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][prev_frame].position.z())
+
+        #         # calc_center_z = np.mean([bone_frame_dic["右足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()])
+        #         # bone_frame_dic["センター"][frame].position.setZ(calc_center_z)
+        #         # center_z_list.append(calc_center_z)
+        #     # else:
+        #     #     # bone_frame_dic["センター"][frame].position.setZ(center_z)
+        #     #     bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
+        #     #     bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
+
+        #     #     calc_center_z = np.mean([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()])
+        #     #     bone_frame_dic["センター"][frame].position.setZ( calc_center_z )
+        #     #     center_z_list.append(calc_center_z)
+        #     #     # center_z_list.append(center_z)
+
+        #     elif prev_left_frame == frame and prev_right_frame == frame:
+        #         # どっちも動いている場合、そのままセンターZ適用
+        #         # bone_frame_dic["センター"][frame].position.setZ(center_z)
+        #         bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
+        #         bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
+
+        #         # center_z_list.append(center_z)
+        #     else:
+        #         # bone_frame_dic["センター"][frame].position.setZ(center_z)
+        #         # bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + center_z)
+        #         # bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + center_z)
+        #         # どっちかが動いている場合、センターZ部分適用
+        #         if prev_left_frame == frame:
+        #             # 左足が動いている場合
+        #             # calc_center_z = np.mean([bone_frame_dic["センター"][frame - 1].position.z(), center_z])
+        #             calc_center_z = bone_frame_dic["センター"][prev_right_frame].position.z()
+        #             bone_frame_dic["左足ＩＫ"][frame].position.setZ(calc_center_z + bone_frame_dic["左足ＩＫ"][frame].position.z())
+        #             bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][prev_right_frame].position.z())
+
+        #             # bone_frame_dic["左足ＩＫ"][frame].position.setZ(center_z + (bone_frame_dic["左足ＩＫ"][frame].position.z() - bone_frame_dic["左足ＩＫ"][frame - 1].position.z()))
+        #         else:
+        #             # 右足が動いている場合
+        #             # calc_center_z = np.mean([bone_frame_dic["センター"][frame - 1].position.z(), center_z])
+        #             calc_center_z = bone_frame_dic["センター"][prev_left_frame].position.z()
+        #             bone_frame_dic["右足ＩＫ"][frame].position.setZ(calc_center_z + bone_frame_dic["右足ＩＫ"][frame].position.z())
+        #             bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][prev_left_frame].position.z())
+                    
+        #             # bone_frame_dic["右足ＩＫ"][frame].position.setZ(center_z + (bone_frame_dic["右足ＩＫ"][frame].position.z() - bone_frame_dic["右足ＩＫ"][frame - 1].position.z()))
+
+        # # 両足の間のどの辺にセンターZがあるか割合
+        # if prev_left_frame != frame and prev_right_frame != frame:
+        #     # 前回から動いていない場合、前回比率保持
+        #     z_rate = prev_z_rate
+        # else:
+        #     z_rate = abs((max(now_right_z, now_left_z) - now_center_z) / (max(now_right_z, now_left_z) - min(now_right_z, now_left_z)))
+        #     z_rate = prev_z_rate if z_rate > 1 else z_rate
+
+        # # センターZは両足の間に再設定する
+        # calc_center_z = min(bone_frame_dic["右足ＩＫ"][frame].position.z(), (bone_frame_dic["左足ＩＫ"][frame].position.z())) - ((min(bone_frame_dic["右足ＩＫ"][frame].position.z(), (bone_frame_dic["左足ＩＫ"][frame].position.z())) - max(bone_frame_dic["右足ＩＫ"][frame].position.z(), (bone_frame_dic["左足ＩＫ"][frame].position.z()))) * z_rate)
+        
+        # # logger.info("f: %s, z_rate: %s, z: %s, r: %s, l:%s, c: %s", frame, z_rate, calc_center_z, now_right_z, now_left_z, now_center_z)
+
+        # depthf.write("{0}, o: {1}, n:{2}, z:{3}, c:{4}, l:{3}, r:{4}\n".format(frame, org_depth, now_depth, center_z, calc_center_z, bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()))
+
+        # bone_frame_dic["センター"][frame].position.setZ(calc_center_z)
+        # center_z_list.append(calc_center_z)
+        
+        # # 前回比率として保持
+        # prev_z_rate = z_rate
+
+        # 足IKのZを加味する
+        # bone_frame_dic["センター"][frame].position.setZ(center_z + np.mean([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) - min(bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()))
+
+    # depthf.close()
+
+    # # 前後フレームで深度平均をとる
+    # calc_center_z_avgs = calc_move_average(center_z_list, 3)
+
+    # # # ユーロフィルターをかける
+    # # calc_center_z_avgs = filter_depths(calc_center_z_avgs)
+
+    # # センターZ入れ直し
+    # for frame, calc_center_z in enumerate(calc_center_z_avgs):
+    #     bone_frame_dic["センター"][frame].position.setZ(calc_center_z)
+
+
+
+
+
+    # for frame in range(len(bone_frame_dic["センター"])):
+    #     # センターZを再調整
+    #     left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][prev_left_frame].position
+    #     if abs(left_leg_diff.x()) > 0.2 or abs(left_leg_diff.y()) > 0.2 or abs(left_leg_diff.z()) > 0.2:
+    #         # 左足IKが前回から動いていたら、フレーム登録
+    #         prev_left_frame = frame
+
+    #     right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][prev_right_frame].position
+    #     if abs(right_leg_diff.x()) > 0.2 or abs(right_leg_diff.y()) > 0.2 or abs(right_leg_diff.z()) > 0.2:
+    #         # logger.info("右足ＩＫ: %s -> %s", bone_frame_dic["右足ＩＫ"][prev_right_frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
+    #         # 右足IKが前回から動いていたら、フレーム登録
+    #         prev_right_frame = frame
+    
+    #     if prev_left_frame != frame and prev_right_frame != frame:
+    #         # logger.info("センターZ動かさない: %s", frame)
+
+    #         # 右足も左足も動いていない場合、センターZを前回から動かさない
+    #         # 前回インデックスで近い方採用
+    #         prev_frame = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
+    #         bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_frame].position.z() )
+
+    #     # # 足IKのZを先に調整する
+    #     # bone_frame_dic["左足ＩＫ"][idx].position.setZ(bone_frame_dic["左足ＩＫ"][idx].position.z() + bone_frame_dic["センター"][frame].position.z())
+    #     # bone_frame_dic["右足ＩＫ"][idx].position.setZ(bone_frame_dic["右足ＩＫ"][idx].position.z() + bone_frame_dic["センター"][frame].position.z())
+
+    #     # センターZは両足の間に再設定する
+    #     bone_frame_dic["センター"][idx].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][idx].position.z(), bone_frame_dic["右足ＩＫ"][idx].position.z()]) )
+
+    # for nd in nd_depths:
+    #     # logger.info("A) %s: Neck: %s, RHip: %s, LHip: %s", ds[pos2vmd_utils.DEPTH_INDEX["index"]], ds[pos2vmd_utils.DEPTH_INDEX["Neck"]], ds[pos2vmd_utils.DEPTH_INDEX["RHip"]], ds[pos2vmd_utils.DEPTH_INDEX["LHip"]])
+    #     depth_values.append(nd[1:].mean())
+    #     # depth_values.append(np.average([ds[pos2vmd_utils.DEPTH_INDEX["RKnee"]],ds[pos2vmd_utils.DEPTH_INDEX["LKnee"]],ds[pos2vmd_utils.DEPTH_INDEX["RAnkle"]],ds[pos2vmd_utils.DEPTH_INDEX["LAnkle"]]]))
+    #     # depth_values.append(np.array(ds[1:]).max())
+    #     # depth_values.append()
+
+
+    # # 深度を滑らかにする
+    # smooth_depth_frames = smooth_depth(bone_frame_dic, depth_values, 13, 5)
+    
+
         # ds = []
         # for pos in ["Neck"]:
         #     ds.append(d[pos2vmd_utils.DEPTH_INDEX[pos]])
-        # logger.info(ds)
         # depth_values.append(np.average(np.array(ds[1:]), weights=[0.1,0.8,0.3,0.1,0.0,0.3,0.1,0.0,0.3,0.1,0.0,0.3,0.1,0.0,0.0,0.0,0.0,0.0]))
         # depth_values.append(ds[pos2vmd_utils.DEPTH_INDEX["Neck"]])
         # depth_values[int(ds[pos2vmd_utils.DEPTH_INDEX["index"]])] = ds[pos2vmd_utils.DEPTH_INDEX["Neck"]]
-        depth_values[int(ds[pos2vmd_utils.DEPTH_INDEX["index"]])] = np.average([ds[pos2vmd_utils.DEPTH_INDEX["Neck"]],ds[pos2vmd_utils.DEPTH_INDEX["RHip"]],ds[pos2vmd_utils.DEPTH_INDEX["LHip"]]])
+        # depth_values[int(ds[pos2vmd_utils.DEPTH_INDEX["index"]])] = np.average([ds[pos2vmd_utils.DEPTH_INDEX["Neck"]],ds[pos2vmd_utils.DEPTH_INDEX["RHip"]],ds[pos2vmd_utils.DEPTH_INDEX["LHip"]]])
         # depth_values[int(ds[pos2vmd_utils.DEPTH_INDEX["index"]])] = np.average([ds[pos2vmd_utils.DEPTH_INDEX["RHip"]],ds[pos2vmd_utils.DEPTH_INDEX["LHip"]]])
         # depth_values.append(np.amax(np.array(ds[1:])))
         # depth_values.append(np.average(np.array(ds[1:]), weights=[0.1,0.6,0.1,0.1,0.0,0.1,0.1,0.0,0.5,0.1,0.0,0.5,0.1,0.0,0.0,0.0,0.0,0.0]))
+        # depth_values.append(np.average([ds[pos2vmd_utils.DEPTH_INDEX["Neck"]],ds[pos2vmd_utils.DEPTH_INDEX["RHip"]],ds[pos2vmd_utils.DEPTH_INDEX["LHip"]]]))
 
     # logger.info("depth_values: %s", depth_values)
 
-    # 全フレームの推定深度(あり得ない値を入れる)
-    depth_all_frames = [-1000 for x in range(len(bone_frame_dic["センター"]))]
+    # # 全フレームの推定深度
+    # depth_all_frames = [0 for x in range(len(bone_frame_dic["センター"]))]
 
-    if 0 not in depth_values:
-        # 0F目から始まらない場合、0F目に先頭フレームの深度を設定する
-        depth_all_frames[0] = depth_values[sorted(depth_values.keys())[0]]
+    # if 0 not in depth_values:
+    #     # 0F目から始まらない場合、0F目に先頭フレームの深度を設定する
+    #     depth_all_frames[0] = depth_values[sorted(depth_values.keys())[0]]
 
-    for n, d in enumerate(depth_all_frames):
-        if n in depth_values:
-            # 深度データがある場合、深度を設定する
-            depth_all_frames[n] = float(depth_values[n])
+    # for n, d in enumerate(depth_all_frames):
+    #     if n in depth_values:
+    #         # 深度データがある場合、深度を設定する
+    #         depth_all_frames[n] = float(depth_values[n])
 
-            if n > 0:
-                # 0以上の場合、過去フレームを埋める
-                for m, pd in enumerate(depth_all_frames[0:n]):
-                    if m > 0 and pd == -1000:
-                        # 未設定の深度INDEXに辿り着いた場合
-                        # logger.info("n: %s, m: %s, 区間: %s", n, m, n-m+1)
-                        for o, nd in enumerate(np.linspace(depth_all_frames[m-1], depth_all_frames[n], (n-m+1))):
-                            depth_all_frames[o+m] = nd
-                        break
+    #         if n > 0:
+    #             # 0以上の場合、過去フレームを埋める
+    #             for m, pd in enumerate(depth_all_frames[0:n]):
+    #                 if m > 0 and pd == -1000:
+    #                     # 未設定の深度INDEXに辿り着いた場合
+    #                     # logger.info("n: %s, m: %s, 区間: %s", n, m, n-m+1)
+    #                     for o, nd in enumerate(np.linspace(depth_all_frames[m-1], depth_all_frames[n], (n-m+1))):
+    #                         depth_all_frames[o+m] = nd
+    #                     break
 
     # for idx, n in enumerate(depth_indexes) :
     #     # 深度のINDEX1件ごとにセンターZ計算
@@ -732,17 +1189,17 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs
     #     if nn > 0:
     #         # 1F以降の場合、その間のセンターも埋める
     #         prev_depth = depth_values[idx - 1]
-    #         prev_idx = int(depth_indexes[idx - 1])
+    #         prev_frame = int(depth_indexes[idx - 1])
 
     #         # 前回との間隔
-    #         interval = nn - prev_idx
+    #         interval = nn - prev_frame
 
     #         # 前回との間隔の差分
     #         diff_depth = now_depth - prev_depth
 
-    #         logger.debug("prev_idx: {0}, prev_depth: {1}, interval: {2}, diff_depth: {3}".format(prev_idx, prev_depth, interval, diff_depth))
+    #         logger.debug("prev_frame: {0}, prev_depth: {1}, interval: {2}, diff_depth: {3}".format(prev_frame, prev_depth, interval, diff_depth))
             
-    #         for midx, m in enumerate(range(prev_idx + 1, nn)):
+    #         for midx, m in enumerate(range(prev_frame + 1, nn)):
     #             interval_depth = prev_depth + ( (diff_depth / interval) * (midx + 1) )
 
     #             # 深度リストに追加
@@ -750,115 +1207,80 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs
 
     # logger.info("depth_all_frames: %s", depth_all_frames[2130:2145])
 
-    # 深度を滑らかにする
-    smoothed_depth_frames = smooth_depth(depth_all_frames, 13, 2)
-
     # logger.info("smoothed_depth_frames: %s", smoothed_depth_frames[2130:2145])
     # logger.info("len(smoothed_depth_frames): %s", len(smoothed_depth_frames))
     # logger.info("bone_frame_dic[センター]: %s", len(bone_frame_dic["センター"]))
 
-    # 深度からセンターZを求める
-    for idx, now_depth in enumerate(smoothed_depth_frames):
-        if idx >= len(bone_frame_dic["センター"]):
-            break
+    # # 深度からセンターZを求める
+    # for idx, now_depth in enumerate(smooth_depth_frames):
+    #     if idx >= len(bone_frame_dic["センター"]):
+    #         break
 
-        # センターZ倍率から求める
-        center_z = now_depth * center_z_scale
-        logger.debug("idx: %s, now: %s, z:%s", idx, now_depth, center_z)
+    #     # センターZ倍率から求める
+    #     center_z = now_depth * center_z_scale
+    #     logger.info("idx: %s, now: %s, z:%s", idx, now_depth, center_z)
 
-        # センターZ
-        bone_frame_dic["センター"][idx].position.setZ(center_z)
+    #     # センターZ
+    #     bone_frame_dic["センター"][idx].position.setZ(center_z)
+    #     bone_frame_dic["左足ＩＫ"][idx].position.setZ(bone_frame_dic["左足ＩＫ"][idx].position.z() + center_z)
+    #     bone_frame_dic["右足ＩＫ"][idx].position.setZ(bone_frame_dic["右足ＩＫ"][idx].position.z() + center_z)
 
-    # 前回動いたフレーム
-    prev_left_frame = 0
-    prev_right_frame = 0
+    # logger.debug("calc_center_z 1: %s %s %s", bone_frame_dic["右足ＩＫ"][0].position.z(),  bone_frame_dic["左足ＩＫ"][0].position.z(), bone_frame_dic["センター"][0].position.z())
 
-    logger.debug("calc_center_z 1: %s %s %s", bone_frame_dic["右足ＩＫ"][0].position.z(),  bone_frame_dic["左足ＩＫ"][0].position.z(), bone_frame_dic["センター"][0].position.z())
 
-    # 左右足のどっちに接地しているか
-    ik_ground_dic = {}
-
-    for frame in range(len(bone_frame_dic["センター"])):
-        # センターZを再調整
-        left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][prev_left_frame].position
-        if abs(left_leg_diff.x()) > 0.2 or abs(left_leg_diff.y()) > 0.2 or abs(left_leg_diff.z()) > 0.2:
-            # 左足IKが前回から動いていたら、フレーム登録
-            prev_left_frame = frame
-
-        right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][prev_right_frame].position
-        if abs(right_leg_diff.x()) > 0.2 or abs(right_leg_diff.y()) > 0.2 or abs(right_leg_diff.z()) > 0.2:
-            # logger.info("右足ＩＫ: %s -> %s", bone_frame_dic["右足ＩＫ"][prev_right_frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
-            # 右足IKが前回から動いていたら、フレーム登録
-            prev_right_frame = frame
-    
-        if prev_left_frame != frame and prev_right_frame != frame:
-            # logger.info("センターZ動かさない: %s", frame)
-
-            # 右足も左足も動いていない場合、センターZを前回から動かさない
-            # 前回インデックスで近い方採用
-            prev_idx = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
-            bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_idx].position.z() )
-
-        if bone_frame_dic["左足ＩＫ"][frame].position.y() < bone_frame_dic["右足ＩＫ"][frame].position.y() or ( \
-            bone_frame_dic["左足ＩＫ"][frame].position.y() > bone_frame_dic["右足ＩＫ"][frame].position.y() \
-                and bone_frame_dic["左足ＩＫ"][frame - 1].position.y() < bone_frame_dic["右足ＩＫ"][frame - 1].position.y() \
-                and bone_frame_dic["左足ＩＫ"][frame + 1].position.y() < bone_frame_dic["右足ＩＫ"][frame + 1].position.y() \
-            ):
-            # 左足が上か、1Fだけ右足が上の場合、左足接地と見なす
-            ik_ground_dic[frame] = "left"
-        else:
-            # それ以外は右足接地
-            ik_ground_dic[frame] = "right"
-
-    for frame in range(1, len(bone_frame_dic["センター"]) - 1):
-        if ik_ground_dic[frame] == "left":
-            # 左足接地の場合
-            # if 4380 < frame < 4430:
-            # logger.info("○左足接地 %s: l: %s, r: %s", frame, bone_frame_dic["左足ＩＫ"][frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
+    # for frame in range(1, len(bone_frame_dic["センター"]) - 1):
+    #     if ik_ground_dic[frame] == "left":
+    #         # 左足接地の場合
+    #         # if 4380 < frame < 4430:
+    #         # logger.info("○左足接地 %s: l: %s, r: %s", frame, bone_frame_dic["左足ＩＫ"][frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
             
-            is_ground = True
-            for f in range(frame, len(bone_frame_dic["センター"])):
-                if ik_ground_dic[f] == "left" and is_ground == True:
-                    # 左足接地の場合、動かさない
-                    left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position.z() - bone_frame_dic["左足ＩＫ"][f].position.z()
-                else:
-                    # 左足空中の場合、直前の差分をそのまま使う（センターZを動かす）
-                    # 一旦空中に出たら、差分は新たに求めない
-                    is_ground = False
+    #         is_ground = True
+    #         for f in range(frame, len(bone_frame_dic["センター"])):
+    #             if ik_ground_dic[f] == "left" and is_ground == True:
+    #                 # 左足接地の場合、動かさない
+    #                 left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position.z() - bone_frame_dic["左足ＩＫ"][f].position.z()
+    #             else:
+    #                 # 左足空中の場合、直前の差分をそのまま使う（センターZを動かす）
+    #                 # 一旦空中に出たら、差分は新たに求めない
+    #                 is_ground = False
                 
-                # if 4380 < f < 4430 and  4380 < frame < 4430:
-                #     logger.info("g: %s, frame: %s, f: %s, left_leg_diff: %s, fp: %s, pos: %s", is_ground, frame, f, left_leg_diff, bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["左足ＩＫ"][f].position.z())
+    #             # if 4380 < f < 4430 and  4380 < frame < 4430:
+    #             #     logger.info("g: %s, frame: %s, f: %s, left_leg_diff: %s, fp: %s, pos: %s", is_ground, frame, f, left_leg_diff, bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["左足ＩＫ"][f].position.z())
 
-                bone_frame_dic["左足ＩＫ"][f].position.setZ(bone_frame_dic["左足ＩＫ"][f].position.z() + left_leg_diff)
-                bone_frame_dic["右足ＩＫ"][f].position.setZ(bone_frame_dic["右足ＩＫ"][f].position.z() + left_leg_diff)
+    #             bone_frame_dic["左足ＩＫ"][f].position.setZ(bone_frame_dic["左足ＩＫ"][f].position.z() + left_leg_diff)
+    #             bone_frame_dic["右足ＩＫ"][f].position.setZ(bone_frame_dic["右足ＩＫ"][f].position.z() + left_leg_diff)
 
-        elif ik_ground_dic[frame] == "right":
-            # 右足接地の場合
-            # if 4380 < frame < 4430:
-            # logger.info("●右足接地 %s: l: %s, r: %s", frame, bone_frame_dic["左足ＩＫ"][frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
+    #     elif ik_ground_dic[frame] == "right":
+    #         # 右足接地の場合
+    #         # if 4380 < frame < 4430:
+    #         # logger.info("●右足接地 %s: l: %s, r: %s", frame, bone_frame_dic["左足ＩＫ"][frame].position, bone_frame_dic["右足ＩＫ"][frame].position)
             
-            is_ground = True
-            for f in range(frame, len(bone_frame_dic["センター"])):
-                if ik_ground_dic[f] == "right" and is_ground == True:
-                    # 右足接地の場合、動かさない
-                    right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position.z() - bone_frame_dic["右足ＩＫ"][f].position.z()
-                else:
-                    # 右足空中の場合、直前の差分をそのまま使う（センターZを動かす）
-                    # 一旦空中に出たら、差分は新たに求めない
-                    is_ground = False
+    #         is_ground = True
+    #         for f in range(frame, len(bone_frame_dic["センター"])):
+    #             if ik_ground_dic[f] == "right" and is_ground == True:
+    #                 # 右足接地の場合、動かさない
+    #                 right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position.z() - bone_frame_dic["右足ＩＫ"][f].position.z()
+    #             else:
+    #                 # 右足空中の場合、直前の差分をそのまま使う（センターZを動かす）
+    #                 # 一旦空中に出たら、差分は新たに求めない
+    #                 is_ground = False
                 
-                # logger.info("%s, frame: %s, f: %s, right_leg_diff: %s, pos: %s", bone_frame_dic["右足ＩＫ"][f].position.y() <= right_ik_ground_pos[f], frame, f, right_leg_diff, bone_frame_dic["右足ＩＫ"][f].position.z())
+    #             # logger.info("%s, frame: %s, f: %s, right_leg_diff: %s, pos: %s", bone_frame_dic["右足ＩＫ"][f].position.y() <= right_ik_ground_pos[f], frame, f, right_leg_diff, bone_frame_dic["右足ＩＫ"][f].position.z())
 
-                bone_frame_dic["左足ＩＫ"][f].position.setZ(bone_frame_dic["左足ＩＫ"][f].position.z() + right_leg_diff)
-                bone_frame_dic["右足ＩＫ"][f].position.setZ(bone_frame_dic["右足ＩＫ"][f].position.z() + right_leg_diff)
+    #             bone_frame_dic["左足ＩＫ"][f].position.setZ(bone_frame_dic["左足ＩＫ"][f].position.z() + right_leg_diff)
+    #             bone_frame_dic["右足ＩＫ"][f].position.setZ(bone_frame_dic["右足ＩＫ"][f].position.z() + right_leg_diff)
 
-        # センターZは両足の間に再設定する
-        bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
+    #     # センターZは両足の間に再設定する
+    #     bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
 
-    # 0F目もセンターZは両足の間に再設定する
-    bone_frame_dic["センター"][0].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][0].position.z(), bone_frame_dic["右足ＩＫ"][0].position.z()]) )
+    # # 0F目もセンターZは両足の間に再設定する
+    # bone_frame_dic["センター"][0].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][0].position.z(), bone_frame_dic["右足ＩＫ"][0].position.z()]) )
 
 
+
+    # # 前回動いたフレーム
+    # prev_left_frame = 0
+    # prev_right_frame = 0
 
     # for frame in range(len(bone_frame_dic["センター"])):
     #     # センターZを再調整
@@ -880,63 +1302,78 @@ def calc_center_z(bone_frame_dic, smoothed_2d, depths, start_frame, upright_idxs
 
     #             # 右足も左足も動いていない場合、センターZを前回から動かさない
     #             # 前回インデックスで近い方採用
-    #             prev_idx = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
-    #             bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_idx].position.z() )
-
+    #             prev_frame = prev_left_frame if prev_left_frame > prev_right_frame else prev_right_frame
+    #             bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][prev_frame].position.z() )
+                
     # for frame in range(len(bone_frame_dic["センター"])):
-    #     # 調整後のセンターZに足IKを合わせる
-    #     if frame == 0:
-    #         bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
-    #         bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
-    #     else:
-    #         # IKのZを調整したか否か
-    #         is_left_ik_z_adjust = False
-    #         is_right_ik_z_adjust = False
+    #     # # 調整後のセンターZに足IKを合わせる
+    #     # if frame == 0:
+    #     #     bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
+    #     #     bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
+    #     # else:
+    #     #     # IKのZを調整したか否か
+    #     #     is_left_ik_z_adjust = False
+    #     #     is_right_ik_z_adjust = False
 
-    #         left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][frame - 1].position
-    #         if left_leg_diff.x() > 0.2 or left_leg_diff.y() > 0.2 or left_leg_diff.z() > 0.2 :
-    #             is_left_ik_z_adjust = True
+    #     #     left_leg_diff = bone_frame_dic["左足ＩＫ"][frame].position - bone_frame_dic["左足ＩＫ"][frame - 1].position
+    #     #     if left_leg_diff.x() > 0.2 or left_leg_diff.y() > 0.2 or left_leg_diff.z() > 0.2 :
+    #     #         is_left_ik_z_adjust = True
 
-    #         right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][frame - 1].position
-    #         if right_leg_diff.x() > 0.2 or right_leg_diff.y() > 0.2 or right_leg_diff.z() > 0.2 :
-    #             is_right_ik_z_adjust = True
+    #     #     right_leg_diff = bone_frame_dic["右足ＩＫ"][frame].position - bone_frame_dic["右足ＩＫ"][frame - 1].position
+    #     #     if right_leg_diff.x() > 0.2 or right_leg_diff.y() > 0.2 or right_leg_diff.z() > 0.2 :
+    #     #         is_right_ik_z_adjust = True
 
-    #         if is_left_ik_z_adjust == False or is_right_ik_z_adjust == False:
-    #             # 足IKの調整をどちらか行っていない場合、センターZを動かさない
-    #             bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][frame - 1].position.z() )
+    #     #     if is_left_ik_z_adjust == False or is_right_ik_z_adjust == False:
+    #     #         # 足IKの調整をどちらか行っていない場合、センターZを動かさない
+    #     #         bone_frame_dic["センター"][frame].position.setZ( bone_frame_dic["センター"][frame - 1].position.z() )
             
-    #         # 判定をした後、調整する
-    #         if is_left_ik_z_adjust == True:
-    #             # 調整する場合、センターZを考慮する
-    #             bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
-    #         else:
-    #             # 調整しない場合、前フレームのZをコピーする
-    #             bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame - 1].position.z())
+    #     #     # 判定をした後、調整する
+    #     #     if is_left_ik_z_adjust == True:
+    #     #         # 調整する場合、センターZを考慮する
+    #     #         bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
+    #     #     else:
+    #     #         # 調整しない場合、前フレームのZをコピーする
+    #     #         bone_frame_dic["左足ＩＫ"][frame].position.setZ(bone_frame_dic["左足ＩＫ"][frame - 1].position.z())
 
-    #         # 右足も同様に調整する
-    #         if is_right_ik_z_adjust == True:
-    #             bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
-    #         else:
-    #             bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame - 1].position.z())
+    #     #     # 右足も同様に調整する
+    #     #     if is_right_ik_z_adjust == True:
+    #     #         bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame].position.z() + bone_frame_dic["センター"][frame].position.z())
+    #     #     else:
+    #     #         bone_frame_dic["右足ＩＫ"][frame].position.setZ(bone_frame_dic["右足ＩＫ"][frame - 1].position.z())
 
-    #     # センターZは両足の間に再設定する
-    #     bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
+    #     # # センターZは両足の間に再設定する
+    #     # bone_frame_dic["センター"][frame].position.setZ( np.average([bone_frame_dic["左足ＩＫ"][frame].position.z(), bone_frame_dic["右足ＩＫ"][frame].position.z()]) )
 
+def filter_depths(depth_value_avgs):
+    # JSONファイルから設定を読み込む
+    config = json.load(open("filter/config_depth.json", "r"))
 
-def smooth_depth(depth_all_frames, section, smooth_times):
+    dfilter = pos2vmd_filter.OneEuroFilter(**config)
+
+    for frame in range(len(depth_value_avgs)):
+        depth_value_avgs[frame] = dfilter( depth_value_avgs[frame], frame )
+    
+    return depth_value_avgs
+
+def smooth_depth(depth_values, smooth_times):
     # 深度の位置円滑化
     for n in range(smooth_times):
-        for frame in range(len(depth_all_frames)):
-            if frame >= section:
-                prev_f = depth_all_frames[frame - section]
-                now_f = depth_all_frames[frame]
+        for frame in range(len(depth_values)):
+            if frame >= 4:
+                prev2_d = depth_values[frame - 2]
+                prev1_d = depth_values[frame - 1]
+                now_d = depth_values[frame]
 
-                for new_idx, new_f in enumerate(np.linspace(prev_f, now_f, section+1)):
-                    idx = frame - section + new_idx
-                    # logger.info("idx: %s, now_f: %s, new_f: %s", idx, depth_all_frames[idx], new_f)
-                    depth_all_frames[idx] = new_f
+                # 移動ボーンのどこかが動いていたら
+                if now_d != prev2_d:
+                    # 線形補正
+                    new_prev1_d = prev2_d + now_d
+                    new_prev1_d /= 2
+                    depth_values[frame - 1] = new_prev1_d
+            else:
+                depth_values[frame] = depth_values[frame]
 
-    return depth_all_frames
+    return depth_values
 
 def get_nearest_idx(target_list, num):
     """
@@ -1480,6 +1917,9 @@ def calc_center_ik_position(bone_frame_dic, positions_multi, bone_csv_file, smoo
             left_ankle_mmd_diff = left_ankle_mmd - left_ankle_bone
             # 踵補正を入れて設定する
             left_ankle_mmd_diff.setY(left_ankle_mmd_diff.y() + heelpos_common + heelpos)
+
+            # bone_frame_dic["右足ＩＫ"][frame].position = right_ankle_mmd_diff
+            # bone_frame_dic["左足ＩＫ"][frame].position = left_ankle_mmd_diff
 
             # 足止め処理
             if frame == 0:
